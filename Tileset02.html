@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>TileForge (v5) — Multi-tile Preview (zoom+pan) + Autotile + Seamless Presets/Controls + Simplify Presets</title>
+<title>TileForge (v6) — Crisp Preview (no soft scaling) + Autotile Updates + Seamless Presets + Duplicate Slot</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -13,7 +13,7 @@
   .sub { font-size:12px; opacity:.8; }
   .pill { font-size:11px; padding:3px 8px; border:1px solid #293246; border-radius:999px; opacity:.85; white-space:nowrap; }
 
-  main { height: calc(100vh - 54px); display:grid; grid-template-columns: 440px 1fr; gap: 12px; padding: 12px; overflow:hidden; }
+  main { height: calc(100vh - 54px); display:grid; grid-template-columns: 460px 1fr; gap: 12px; padding: 12px; overflow:hidden; }
   .panel, .stage { border:1px solid #1c2330; border-radius:14px; background:#0f1420; overflow:hidden; min-height:0; }
   .panel { display:flex; flex-direction:column; }
   .panel h2 { margin:0; padding:10px 12px; font-size:13px; border-bottom:1px solid #1c2330; background:#0d1220; }
@@ -37,12 +37,14 @@
   .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; background:#0b0f18; border:1px solid #293246;
     border-radius:8px; padding:2px 6px; font-size:11px; }
 
-  .stage { padding: 10px; display:grid; grid-template-columns: 1fr 580px; gap: 12px; overflow:hidden; min-height:0; }
+  .stage { padding: 10px; display:grid; grid-template-columns: 1fr 600px; gap: 12px; overflow:hidden; min-height:0; }
   .card { border:1px solid #1c2330; border-radius:14px; overflow:hidden; background:#0f1420; min-height:0; display:flex; flex-direction:column; }
   .cardHead { padding:10px 12px; border-bottom:1px solid #1c2330; background:#0d1220; display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .cardBody { padding: 10px 12px; overflow:auto; min-height:0; }
 
+  /* IMPORTANT: prevent “soft/filtered” preview by never CSS-scaling canvas to a different size */
   canvas { image-rendering: pixelated; image-rendering: crisp-edges; background: transparent; border:1px solid #1c2330; border-radius:12px; }
+  .noStretch { width:auto !important; height:auto !important; max-width:100%; max-height:100%; display:block; }
 
   /* Tileset split */
   .tileSplit { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height:0; height:100%; }
@@ -75,8 +77,8 @@
     padding:10px; min-height:0; flex: 1 1 auto;
     overflow:hidden;
     position:relative;
+    display:flex; align-items:center; justify-content:center; /* center canvas */
   }
-  .previewFrame canvas { width: 100%; height: 100%; } /* backing store set in JS */
   .overlayHUD {
     position:absolute; top:12px; left:12px;
     font-size:11px; padding:6px 8px;
@@ -101,8 +103,8 @@
 <body>
 <header>
   <div>
-    <div class="title">TileForge (v5)</div>
-    <div class="sub">Preview is real zoom+pan • multi-select tiles • Autotile (bitmask 16) preview • Seamless presets + crisp controls • Simplify presets</div>
+    <div class="title">TileForge (v6)</div>
+    <div class="sub">Fixes: crisp preview (no CSS stretch), autotile smoothing default OFF + always updates, duplicate tile to new slot</div>
   </div>
   <div class="pill">Single file • Alpha PNG export • 32px default</div>
 </header>
@@ -148,7 +150,7 @@
       </div>
 
       <div class="row">
-        <label>Selected Slot (for editing)
+        <label>Selected Slot (editing)
           <input id="slot" type="number" min="1" value="1" />
         </label>
         <label>Upload auto-applies to slot
@@ -166,6 +168,30 @@
       </div>
 
       <details open>
+        <summary class="mini">Duplicate tile</summary>
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <div class="row">
+            <label>Destination Slot (optional)
+              <input id="dupSlot" type="number" min="1" value="0" />
+            </label>
+            <label>Mode
+              <select id="dupMode">
+                <option value="nextEmpty" selected>Next empty slot</option>
+                <option value="next">Next slot</option>
+                <option value="specific">Use destination slot</option>
+              </select>
+            </label>
+          </div>
+          <div class="btnRow">
+            <button id="btnDuplicate">Duplicate current slot →</button>
+          </div>
+          <div class="hint">
+            Duplicates the <b>current editing slot</b> tile into a new slot (tileset undoable).
+          </div>
+        </div>
+      </details>
+
+      <details open>
         <summary class="mini">Make Seamless</summary>
         <div style="display:grid; gap:10px; margin-top:10px;">
           <div class="row">
@@ -178,25 +204,25 @@
               </select>
             </label>
             <label>Margin (px)
-              <input id="seamMargin" type="number" min="1" max="16" value="6" />
+              <input id="seamMargin" type="number" min="1" max="16" value="5" />
             </label>
           </div>
 
           <div class="row">
             <label>Guide Blend (0..1)
-              <input id="seamGuide" type="range" min="0" max="1" step="0.01" value="0.38" />
+              <input id="seamGuide" type="range" min="0" max="1" step="0.01" value="0.32" />
             </label>
             <label>Edge Keep (0..1)
-              <input id="seamEdgeKeep" type="range" min="0" max="1" step="0.01" value="0.75" />
+              <input id="seamEdgeKeep" type="range" min="0" max="1" step="0.01" value="0.82" />
             </label>
           </div>
 
           <div class="row">
             <label>Band Curve (soft→hard)
-              <input id="seamCurve" type="range" min="0.5" max="3" step="0.01" value="1.6" />
+              <input id="seamCurve" type="range" min="0.5" max="3" step="0.01" value="1.85" />
             </label>
             <label>Post Sharpen
-              <input id="seamSharpen" type="range" min="0" max="1" step="0.01" value="0.25" />
+              <input id="seamSharpen" type="range" min="0" max="1" step="0.01" value="0.35" />
             </label>
           </div>
 
@@ -207,7 +233,7 @@
           </div>
 
           <div class="hint">
-            “Crisp” keeps your pattern and reduces edge blur. If seams remain: increase <b>Margin</b> slightly, then nudge <b>Guide Blend</b> up.
+            If edges look too “soft”: reduce <b>Guide Blend</b>, increase <b>Edge Keep</b>, increase <b>Band Curve</b>, or add a bit of <b>Post Sharpen</b>.
           </div>
         </div>
       </details>
@@ -232,7 +258,7 @@
 
           <div class="row">
             <label>Pre-smooth (0 = off)
-              <input id="simpSmooth" type="range" min="0" max="1" step="0.01" value="0.14" />
+              <input id="simpSmooth" type="range" min="0" max="1" step="0.01" value="0.06" />
             </label>
             <label>Edge Preserve
               <select id="simpEdge">
@@ -258,10 +284,6 @@
             <button id="btnSimplify">Simplify Now</button>
             <button id="btnQuantizeToPalette">Quantize → Editor Palette</button>
           </div>
-
-          <div class="hint">
-            Simplify uses k-means palette clustering + ordered dithering (stable, no random weird colors). Keep pre-smooth low for pixel-crisp.
-          </div>
         </div>
       </details>
 
@@ -282,7 +304,6 @@
   </section>
 
   <section class="stage">
-    <!-- Tileset -->
     <div class="card">
       <div class="cardHead">
         <strong>Tileset</strong>
@@ -291,7 +312,6 @@
 
       <div class="cardBody" style="min-height:0;">
         <div class="tileSplit">
-          <!-- Slots -->
           <div class="slotList">
             <div class="slotTop">
               <div class="mini">Slots</div>
@@ -307,14 +327,13 @@
             <div class="slotGrid" id="slotGrid"></div>
           </div>
 
-          <!-- Preview -->
           <div class="previewPane">
             <div class="previewControls">
               <label>Preview Size
                 <select id="previewSize">
-                  <option value="440">440 px</option>
-                  <option value="580" selected>580 px</option>
-                  <option value="740">740 px</option>
+                  <option value="460">460 px</option>
+                  <option value="600" selected>600 px</option>
+                  <option value="760">760 px</option>
                   <option value="920">920 px</option>
                 </select>
               </label>
@@ -357,7 +376,7 @@
             </div>
 
             <div class="previewControls3">
-              <label>Autotile Smoothing
+              <label>Autotile Smoothing (default off)
                 <input id="autoSmooth" type="range" min="0" max="1" step="0.01" value="0" />
               </label>
               <label>Reset View
@@ -369,7 +388,7 @@
             </div>
 
             <div class="previewFrame" id="previewFrame">
-              <canvas id="bigPreview"></canvas>
+              <canvas id="bigPreview" class="noStretch"></canvas>
               <div class="overlayHUD mono" id="hud">zoom 1.00x • pan 0,0</div>
             </div>
 
@@ -377,14 +396,13 @@
               Selected for preview: <span class="mono" id="selCount">0</span> • Editing slot: <span class="mono" id="slotLabel">1</span>
             </div>
             <div class="hint" id="autoHint">
-              Autotile mode expects <b>16 tiles selected</b> (bitmask order). If fewer are selected, it will fall back to cycling tiles.
+              Autotile expects <b>16 tiles selected</b>. If fewer, it still shows the filled/empty field so Fill/Scale/Smoothing always affects preview.
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Working tile + Editor -->
     <div class="card">
       <div class="cardHead">
         <div>
@@ -428,7 +446,7 @@
           <canvas id="editor" width="320" height="320"></canvas>
 
           <div class="hint">
-            Working undo tracks edits + fit + seamless + simplify. Tileset undo tracks slot replacements and apply-to-slot actions.
+            Preview is now always drawn 1:1 in CSS pixels (no stretching). Zoom uses nearest-neighbor (no smoothing).
           </div>
         </div>
       </div>
@@ -445,30 +463,32 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const el = {
-    // left
     file: $("file"), tileSize: $("tileSize"), fitMode: $("fitMode"),
     cols: $("cols"), capacity: $("capacity"), slot: $("slot"),
     autoApplyUpload: $("autoApplyUpload"),
     btnFit: $("btnFit"), btnApplyToSlot: $("btnApplyToSlot"),
     btnUndoTileset: $("btnUndoTileset"),
+
+    dupSlot: $("dupSlot"), dupMode: $("dupMode"), btnDuplicate: $("btnDuplicate"),
+
     seamPreset: $("seamPreset"), seamMargin: $("seamMargin"),
     seamGuide: $("seamGuide"), seamEdgeKeep: $("seamEdgeKeep"),
     seamCurve: $("seamCurve"), seamSharpen: $("seamSharpen"),
     btnSeamless: $("btnSeamless"),
     btnResetWork: $("btnResetWork"), btnUndoWork: $("btnUndoWork"),
-    btnExportTile: $("btnExportTile"), btnExportSet: $("btnExportSet"),
-    status: $("status"),
 
-    // simplify
     simpPreset: $("simpPreset"), simpColors: $("simpColors"),
     simpSmooth: $("simpSmooth"), simpEdge: $("simpEdge"),
     simpDither: $("simpDither"), simpDitherAmt: $("simpDitherAmt"),
     btnSimplify: $("btnSimplify"),
     btnQuantizeToPalette: $("btnQuantizeToPalette"),
 
-    // tileset + preview
+    btnExportTile: $("btnExportTile"), btnExportSet: $("btnExportSet"),
+    status: $("status"),
+
     tilesetInfo: $("tilesetInfo"), slotGrid: $("slotGrid"),
     selAll: $("selAll"), selNone: $("selNone"), selInvert: $("selInvert"),
+
     previewFrame: $("previewFrame"), bigPreview: $("bigPreview"), hud: $("hud"),
     previewSize: $("previewSize"), previewMode: $("previewMode"),
     gridCols: $("gridCols"), gridRows: $("gridRows"), gridLine: $("gridLine"),
@@ -478,7 +498,6 @@
     selCount: $("selCount"), slotLabel: $("slotLabel"),
     autoHint: $("autoHint"),
 
-    // working/editor
     work: $("work"), workInfo: $("workInfo"),
     editZoom: $("editZoom"), brush: $("brush"),
     swatches: $("swatches"),
@@ -487,7 +506,6 @@
     editor: $("editor"),
   };
 
-  // ---------- utils ----------
   function setStatus(msg){ el.status.textContent = msg; }
   function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
   function createCanvas(w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
@@ -502,34 +520,7 @@
     a.href = canvas.toDataURL("image/png");
     a.click();
   }
-  function rgbToKey(r,g,b){ return (r<<16) | (g<<8) | b; }
-  function keyToRgb(k){ return [(k>>16)&255, (k>>8)&255, k&255]; }
-  function buildPaletteFromImageData(img, maxColors=10){
-    const m = new Map();
-    const d = img.data;
-    for (let i=0;i<d.length;i+=4){
-      const a=d[i+3]; if (a<10) continue;
-      const r = (d[i]   & 0xF8);
-      const g = (d[i+1] & 0xF8);
-      const b = (d[i+2] & 0xF8);
-      const k = rgbToKey(r,g,b);
-      m.set(k, (m.get(k)||0)+1);
-    }
-    const arr = [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0, maxColors);
-    if (arr.length === 0) return [[255,255,255],[0,0,0]];
-    return arr.map(([k])=> keyToRgb(k));
-  }
-  function nearestColor(r,g,b, palette){
-    let best = palette[0], bestD = 1e18;
-    for (const c of palette){
-      const dr=r-c[0], dg=g-c[1], db=b-c[2];
-      const d = dr*dr + dg*dg + db*db;
-      if (d<bestD){ bestD=d; best=c; }
-    }
-    return best;
-  }
 
-  // Ordered dither (Bayer 4x4)
   const BAYER4 = [
     [ 0,  8,  2, 10],
     [12,  4, 14,  6],
@@ -537,14 +528,12 @@
     [15,  7, 13,  5],
   ];
 
-  // ---------- state ----------
   const state = {
     tileSize: 32,
     cols: 12,
     capacity: 96,
-
-    selectedSlot: 0,                 // editing
-    selectedForPreview: new Set(),   // multi-select
+    selectedSlot: 0,
+    selectedForPreview: new Set(),
     lastClickedIndex: 0,
 
     tiles: [], // ImageData|null
@@ -562,20 +551,22 @@
 
     cam: { zoom: 1, panX: 0, panY: 0 },
 
-    // autotile map cache (binary field)
-    autoField: null, // Uint8Array size cols*rows
+    autoField: null,
     autoFieldCols: 0,
     autoFieldRows: 0,
     autoFieldSeed: 1,
+    _autoFill: 0,
+    _autoScale: 0,
+    _autoSmooth: 0,
   };
   state.workCtx = ctx2d(state.workCanvas);
 
-  // ---------- undo ----------
   function cloneImageData(img){
     const out = new ImageData(img.width, img.height);
     out.data.set(img.data);
     return out;
   }
+
   function pushWorkUndo(){
     const img = state.workCtx.getImageData(0,0,state.tileSize,state.tileSize);
     state.workUndo.push(cloneImageData(img));
@@ -590,6 +581,7 @@
     requestPreviewDraw();
     setStatus("Undo (working).");
   }
+
   function pushTilesetUndo(){
     const snap = {
       tiles: state.tiles.map(t => t ? cloneImageData(t) : null),
@@ -605,6 +597,7 @@
     state.tiles = snap.tiles.map(t => t ? cloneImageData(t) : null);
     state.selectedSlot = clamp(snap.selectedSlot, 0, state.capacity-1);
     state.selectedForPreview = new Set([...snap.selectedForPreview].filter(i => i>=0 && i<state.capacity));
+
     el.slot.value = String(state.selectedSlot+1);
     el.slotLabel.textContent = String(state.selectedSlot+1);
 
@@ -622,12 +615,12 @@
     setStatus("Undo (tileset).");
   }
 
-  // ---------- sizing / tileset ----------
   function rebuildTilesetStorage(){
     state.capacity = parseInt(el.capacity.value,10);
     const old = state.tiles;
     state.tiles = new Array(state.capacity).fill(null);
     for (let i=0;i<Math.min(old.length, state.tiles.length); i++) state.tiles[i] = old[i];
+
     state.selectedSlot = clamp(state.selectedSlot, 0, state.capacity-1);
     el.slot.min = "1";
     el.slot.max = String(state.capacity);
@@ -689,7 +682,6 @@
     setStatus("Tile size updated.");
   }
 
-  // ---------- slot grid ----------
   function drawThumb(ctx, tile){
     const ts = state.tileSize;
     ctx.imageSmoothingEnabled = false;
@@ -712,8 +704,7 @@
 
   function renderTilesetGrid(){
     el.slotGrid.innerHTML = "";
-    const thumbCols = 6;
-    el.slotGrid.style.gridTemplateColumns = `repeat(${thumbCols}, 1fr)`;
+    el.slotGrid.style.gridTemplateColumns = `repeat(6, 1fr)`;
 
     for (let i=0;i<state.capacity;i++){
       const cell = document.createElement("div");
@@ -792,14 +783,57 @@
   });
   el.selInvert.addEventListener("click", ()=>{
     const s = new Set();
-    for (let i=0;i<state.capacity;i++){
-      if (!state.selectedForPreview.has(i)) s.add(i);
-    }
+    for (let i=0;i<state.capacity;i++) if (!state.selectedForPreview.has(i)) s.add(i);
     state.selectedForPreview = s;
     updateSelCount(); renderTilesetGrid(); requestPreviewDraw();
   });
 
-  // ---------- working tile / fit / apply ----------
+  // Duplicate tile -> new slot
+  function duplicateCurrentSlot(){
+    const src = state.tiles[state.selectedSlot];
+    if (!src){
+      setStatus("Nothing to duplicate: current slot is empty.");
+      return;
+    }
+
+    const mode = el.dupMode.value;
+    let dstIndex = -1;
+
+    if (mode === "nextEmpty"){
+      for (let i=state.selectedSlot+1; i<state.capacity; i++){
+        if (!state.tiles[i]) { dstIndex = i; break; }
+      }
+      if (dstIndex === -1){
+        // wrap search
+        for (let i=0; i<state.selectedSlot; i++){
+          if (!state.tiles[i]) { dstIndex = i; break; }
+        }
+      }
+    } else if (mode === "next"){
+      dstIndex = clamp(state.selectedSlot + 1, 0, state.capacity-1);
+    } else {
+      const v = parseInt(el.dupSlot.value,10) || 0;
+      if (v < 1 || v > state.capacity){
+        setStatus(`Destination slot must be 1..${state.capacity}.`);
+        return;
+      }
+      dstIndex = v - 1;
+    }
+
+    if (dstIndex < 0){
+      setStatus("No empty slot found (tileset full). Choose ‘Next slot’ or a specific destination.");
+      return;
+    }
+
+    pushTilesetUndo();
+    state.tiles[dstIndex] = cloneImageData(src);
+    renderTilesetGrid();
+    requestPreviewDraw();
+    setStatus(`Duplicated slot ${state.selectedSlot+1} → slot ${dstIndex+1}.`);
+  }
+  el.btnDuplicate.addEventListener("click", duplicateCurrentSlot);
+
+  // Working tile helpers
   function fitImageToCanvas(img, targetCanvas, mode){
     const ctx = targetCanvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
@@ -812,9 +846,7 @@
     let sx=0, sy=0, sw=iw, sh=ih;
     let dx=0, dy=0, dw=tw, dh=th;
 
-    if (mode === "stretch"){
-      // no-op
-    } else if (mode === "contain"){
+    if (mode === "contain"){
       const scale = Math.min(tw/iw, th/ih);
       dw = Math.round(iw*scale);
       dh = Math.round(ih*scale);
@@ -828,9 +860,37 @@
       sx = Math.floor((iw - sw)/2);
       sy = Math.floor((ih - sh)/2);
     }
+    // stretch = default args
 
     ctx.drawImage(img, sx,sy,sw,sh, dx,dy,dw,dh);
     ctx.imageSmoothingEnabled = false;
+  }
+
+  function rgbToKey(r,g,b){ return (r<<16) | (g<<8) | b; }
+  function keyToRgb(k){ return [(k>>16)&255, (k>>8)&255, k&255]; }
+  function buildPaletteFromImageData(img, maxColors=10){
+    const m = new Map();
+    const d = img.data;
+    for (let i=0;i<d.length;i+=4){
+      const a=d[i+3]; if (a<10) continue;
+      const r = (d[i]   & 0xF8);
+      const g = (d[i+1] & 0xF8);
+      const b = (d[i+2] & 0xF8);
+      const k = rgbToKey(r,g,b);
+      m.set(k, (m.get(k)||0)+1);
+    }
+    const arr = [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0, maxColors);
+    if (arr.length === 0) return [[255,255,255],[0,0,0]];
+    return arr.map(([k])=> keyToRgb(k));
+  }
+  function nearestColor(r,g,b, palette){
+    let best = palette[0], bestD = 1e18;
+    for (const c of palette){
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const d = dr*dr + dg*dg + db*db;
+      if (d<bestD){ bestD=d; best=c; }
+    }
+    return best;
   }
 
   function syncPaletteFromWork(){
@@ -842,6 +902,8 @@
 
   function syncWorkToDisplay(){
     const ctx = el.work.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+
     const w=state.tileSize, h=state.tileSize;
     const cell = Math.max(4, Math.floor(w/8));
     ctx.clearRect(0,0,w,h);
@@ -925,7 +987,7 @@
     setStatus("Loading image...");
   });
 
-  // ---------- seamless (with crisp controls) ----------
+  // Seamless (controlled)
   function offsetImageData(img, ox, oy){
     const w=img.width, h=img.height;
     const out = new ImageData(w,h);
@@ -970,6 +1032,37 @@
     if (el.seamPreset.value !== "custom") applySeamPreset();
   });
 
+  function unsharpInPlace(img, amount){
+    const w=img.width, h=img.height;
+    const src = new Uint8ClampedArray(img.data);
+    const dst = img.data;
+
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        if (src[i+3] < 10) continue;
+
+        let br=0,bg=0,bb=0, cnt=0;
+        for (let yy=-1; yy<=1; yy++){
+          for (let xx=-1; xx<=1; xx++){
+            const nx = clamp(x+xx,0,w-1);
+            const ny = clamp(y+yy,0,h-1);
+            const j=(ny*w+nx)*4;
+            if (src[j+3] < 10) continue;
+            br += src[j]; bg += src[j+1]; bb += src[j+2]; cnt++;
+          }
+        }
+        if (!cnt) continue;
+        br/=cnt; bg/=cnt; bb/=cnt;
+
+        dst[i]   = clamp(Math.round(src[i]   + amount*(src[i]   - br)), 0, 255);
+        dst[i+1] = clamp(Math.round(src[i+1] + amount*(src[i+1] - bg)), 0, 255);
+        dst[i+2] = clamp(Math.round(src[i+2] + amount*(src[i+2] - bb)), 0, 255);
+        dst[i+3] = 255;
+      }
+    }
+  }
+
   function makeSeamlessSmartControlled(){
     pushWorkUndo();
 
@@ -977,12 +1070,11 @@
     const src = state.workCtx.getImageData(0,0,w,h);
 
     const margin = clamp(parseInt(el.seamMargin.value,10) || 6, 1, Math.floor(w/2)-1);
-    const guideBlend = parseFloat(el.seamGuide.value);     // 0..1
-    const edgeKeep = parseFloat(el.seamEdgeKeep.value);    // 0..1
-    const curve = parseFloat(el.seamCurve.value);          // 0.5..3
-    const sharpen = parseFloat(el.seamSharpen.value);      // 0..1
+    const guideBlend = parseFloat(el.seamGuide.value);
+    const edgeKeep = parseFloat(el.seamEdgeKeep.value);
+    const curve = parseFloat(el.seamCurve.value);
+    const sharpen = parseFloat(el.seamSharpen.value);
 
-    // Guidance: mirrored blend (pattern-preserving-ish)
     const srcC = createCanvas(w,h);
     srcC.getContext("2d").putImageData(src,0,0);
 
@@ -1007,11 +1099,9 @@
 
     const guide = gctx.getImageData(0,0,w,h);
 
-    // Offset: seams to center
     const halfX = Math.floor(w/2), halfY = Math.floor(h/2);
     const off = offsetImageData(src, halfX, halfY);
 
-    // Blend only within seam cross band; keep outside intact
     const out = new ImageData(w,h);
 
     for (let y=0;y<h;y++){
@@ -1032,13 +1122,11 @@
 
         const rG=guide.data[i], gG=guide.data[i+1], bG=guide.data[i+2];
 
-        // band weight: stronger near center seam, weaker near band edge; curve controls hardness
         const dmin = Math.min(dx,dy);
         let t = 1 - (dmin / margin);
         t = clamp(t, 0, 1);
         t = Math.pow(t, curve);
 
-        // edge keep: if guide differs a lot from original, prefer original
         const dc = Math.sqrt((rO-rG)*(rO-rG)+(gO-gG)*(gO-gG)+(bO-bG)*(bO-bG));
         const keep = clamp(1 - dc/100, 0, 1);
         const guided = guideBlend * t * (1 - keep * edgeKeep);
@@ -1050,56 +1138,17 @@
       }
     }
 
-    // Offset back
     const back = offsetImageData(out, halfX, halfY);
-
-    // Optional subtle unsharp mask to counter “blurred edges”
-    if (sharpen > 0.001){
-      unsharpInPlace(back, sharpen);
-    }
+    if (sharpen > 0.001) unsharpInPlace(back, sharpen);
 
     state.workCtx.putImageData(back,0,0);
     syncPaletteFromWork();
     syncWorkToDisplay();
     requestPreviewDraw();
-    setStatus(`Seamless done (margin ${margin}px, guide ${guideBlend.toFixed(2)}, edgeKeep ${edgeKeep.toFixed(2)}, sharpen ${sharpen.toFixed(2)}).`);
+    setStatus("Seamless done.");
   }
 
-  function unsharpInPlace(img, amount){
-    const w=img.width, h=img.height;
-    const src = new Uint8ClampedArray(img.data);
-    const dst = img.data;
-
-    // tiny blur (3x3 box)
-    function get(ix){ return src[ix]; }
-    for (let y=0;y<h;y++){
-      for (let x=0;x<w;x++){
-        const i=(y*w+x)*4;
-        if (src[i+3] < 10) continue;
-
-        let br=0,bg=0,bb=0, cnt=0;
-        for (let yy=-1; yy<=1; yy++){
-          for (let xx=-1; xx<=1; xx++){
-            const nx = clamp(x+xx,0,w-1);
-            const ny = clamp(y+yy,0,h-1);
-            const j=(ny*w+nx)*4;
-            if (src[j+3] < 10) continue;
-            br += src[j]; bg += src[j+1]; bb += src[j+2]; cnt++;
-          }
-        }
-        if (!cnt) continue;
-        br/=cnt; bg/=cnt; bb/=cnt;
-
-        // unsharp: original + amount*(original - blur)
-        dst[i]   = clamp(Math.round(src[i]   + amount*(src[i]   - br)), 0, 255);
-        dst[i+1] = clamp(Math.round(src[i+1] + amount*(src[i+1] - bg)), 0, 255);
-        dst[i+2] = clamp(Math.round(src[i+2] + amount*(src[i+2] - bb)), 0, 255);
-        dst[i+3] = 255;
-      }
-    }
-  }
-
-  // ---------- simplify ----------
+  // Simplify (same as before, stable palette + ordered dither)
   function applySimplifyPreset(){
     const p = el.simpPreset.value;
     if (p === "clean"){
@@ -1168,7 +1217,6 @@
         }
 
         let wr=0,wg=0,wb=0,wsum=0;
-
         for (let yy=-rad; yy<=rad; yy++){
           for (let xx=-rad; xx<=rad; xx++){
             const nx = clamp(x+xx, 0, w-1);
@@ -1185,13 +1233,9 @@
           }
         }
 
-        const r = (wsum>0) ? (wr/wsum) : r0;
-        const g = (wsum>0) ? (wg/wsum) : g0;
-        const b = (wsum>0) ? (wb/wsum) : b0;
-
-        dst[i]=Math.round(r);
-        dst[i+1]=Math.round(g);
-        dst[i+2]=Math.round(b);
+        dst[i]=Math.round(wsum?wr/wsum:r0);
+        dst[i+1]=Math.round(wsum?wg/wsum:g0);
+        dst[i+2]=Math.round(wsum?wb/wsum:b0);
         dst[i+3]=255;
       }
     }
@@ -1268,11 +1312,11 @@
 
     const w=state.tileSize, h=state.tileSize;
     let img = state.workCtx.getImageData(0,0,w,h);
-
     img = bilateralLiteEdgePreserve(img, smooth, edgeOn);
-    const { centers } = kmeansColors(img, k, 8);
 
+    const { centers } = kmeansColors(img, k, 8);
     const d = img.data;
+
     for (let y=0;y<h;y++){
       for (let x=0;x<w;x++){
         const i=(y*w+x)*4;
@@ -1294,10 +1338,10 @@
     syncPaletteFromWork();
     syncWorkToDisplay();
     requestPreviewDraw();
-    setStatus(`Simplified (k=${k}, smooth=${smooth.toFixed(2)}, dither=${doDither?"on":"off"}).`);
+    setStatus("Simplify done.");
   }
 
-  // ---------- editor ----------
+  // Editor
   function rebuildSwatches(){
     el.swatches.innerHTML = "";
     state.palette.forEach((c, idx)=>{
@@ -1320,14 +1364,12 @@
     el.toolEraser.style.borderColor = (t==="eraser") ? on : off;
     el.toolPicker.style.borderColor = (t==="picker") ? on : off;
   }
-
   function updateEditorCanvas(){
     const z = parseInt(el.editZoom.value,10);
     el.editor.width = state.tileSize * z;
     el.editor.height = state.tileSize * z;
     drawEditorFromWork();
   }
-
   function drawEditorFromWork(){
     const z = parseInt(el.editZoom.value,10);
     const ctx = el.editor.getContext("2d");
@@ -1358,7 +1400,6 @@
     }
     ctx.globalAlpha = 1;
   }
-
   function editorPosFromMouse(ev){
     const rect = el.editor.getBoundingClientRect();
     const scaleX = el.editor.width / rect.width;
@@ -1368,7 +1409,6 @@
     const z = parseInt(el.editZoom.value,10);
     return { x: Math.floor(mx / z), y: Math.floor(my / z) };
   }
-
   function applyStroke(px,py){
     const w=state.tileSize, h=state.tileSize;
     if (px<0||py<0||px>=w||py>=h) return;
@@ -1446,16 +1486,17 @@
     applyStroke(p.x,p.y);
   });
 
-  // ---------- preview camera + draw ----------
+  // Preview (crisp rendering + autotile that always responds)
   let previewDirty = true;
   function requestPreviewDraw(){ previewDirty = true; }
 
   function resizePreviewCanvasToFrame(){
     const size = parseInt(el.previewSize.value,10);
     const rect = el.previewFrame.getBoundingClientRect();
-    const side = Math.floor(Math.min(size, rect.width - 4, rect.height - 4));
-    const dpr = window.devicePixelRatio || 1;
+    const side = Math.floor(Math.min(size, rect.width - 24, rect.height - 24));
 
+    // CRITICAL: make CSS size == backing store / dpr so browser does not filter
+    const dpr = window.devicePixelRatio || 1;
     el.bigPreview.style.width = side + "px";
     el.bigPreview.style.height = side + "px";
     el.bigPreview.width = Math.floor(side * dpr);
@@ -1494,9 +1535,8 @@
     return [state.workCtx.getImageData(0,0,state.tileSize,state.tileSize)];
   }
 
-  // --- Autotile map (binary field) ---
+  // Autotile field generation (binary)
   function buildAutoField(cols, rows, seed, fill, scale, smooth){
-    // base noise at coarse scale, then optional smoothing steps
     const field = new Uint8Array(cols*rows);
     const s = Math.max(1, parseInt(scale,10) || 3);
 
@@ -1509,21 +1549,21 @@
       }
     }
 
-    const iters = Math.floor(smooth * 4); // 0..4
+    // smoother response: 0..1 => 0..10 iterations
+    const iters = Math.floor(clamp(smooth,0,1) * 10 + 1e-6);
     for (let it=0; it<iters; it++){
       const copy = new Uint8Array(field);
       for (let y=0;y<rows;y++){
         for (let x=0;x<cols;x++){
-          let cnt=0, tot=0;
+          let cnt=0;
           for (let yy=-1; yy<=1; yy++){
             for (let xx=-1; xx<=1; xx++){
               const nx = clamp(x+xx, 0, cols-1);
               const ny = clamp(y+yy, 0, rows-1);
-              tot++;
               cnt += copy[ny*cols+nx];
             }
           }
-          // majority vote
+          // majority vote; tweak threshold to keep blobs stable
           field[y*cols+x] = (cnt >= 5) ? 1 : 0;
         }
       }
@@ -1535,7 +1575,6 @@
     const cols = clamp(parseInt(el.gridCols.value,10) || 14, 2, 128);
     const rows = clamp(parseInt(el.gridRows.value,10) || 14, 2, 128);
     const seed = parseInt(el.seed.value,10) || 1;
-
     const fill = parseFloat(el.autoFill.value);
     const scale = parseInt(el.autoScale.value,10) || 3;
     const smooth = parseFloat(el.autoSmooth.value);
@@ -1560,12 +1599,10 @@
     }
   }
 
-  // Bitmask (4-neighbor) → 16 index.
-  // Here we use N/E/S/W. If you're selecting 16 tiles, we map:
-  // bit0 = N, bit1 = E, bit2 = S, bit3 = W
+  // N/E/S/W bitmask
   function mask4(field, cols, rows, x,y){
     const c = field[y*cols+x];
-    if (!c) return -1; // empty
+    if (!c) return -1;
     const n = (y>0)       ? field[(y-1)*cols+x] : 0;
     const e = (x<cols-1)  ? field[y*cols+(x+1)] : 0;
     const s = (y<rows-1)  ? field[(y+1)*cols+x] : 0;
@@ -1579,10 +1616,14 @@
 
     const c = el.bigPreview;
     const ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = false; // CRITICAL for crisp zoom
+
     const dpr = window.devicePixelRatio || 1;
 
     ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,c.width,c.height);
+
+    // draw in CSS pixels using a dpr transform (still crisp with smoothing off)
     ctx.setTransform(dpr,0,0,dpr,0,0);
 
     const side = c.width / dpr;
@@ -1626,13 +1667,11 @@
       ctx.drawImage(tmp, x,y);
     }
 
-    // atlas
     if (mode === "tileset"){
       const atlasCols = state.cols;
       const atlasRows = Math.ceil(state.capacity / atlasCols);
       const atlasW = atlasCols * ts;
       const atlasH = atlasRows * ts;
-      drawCheckerWorld(ctx, state.cam.panX, state.cam.panY, viewWWorld, viewHWorld, 16);
       for (let i=0;i<state.capacity;i++){
         if (!state.tiles[i]) continue;
         const x = (i % atlasCols) * ts;
@@ -1644,31 +1683,31 @@
       return;
     }
 
-    // autotile
     if (mode === "autotile16"){
       ensureAutoField();
       const field = state.autoField;
 
-      // Need 16 tiles. Use first 16 from preview selection list. If fewer, fallback.
       if (tiles.length < 16){
-        // fallback: just show grid cycle
+        // Always show the field so Fill/Scale/Smoothing ALWAYS changes something.
+        // Use your single tile for filled cells; empty stays transparent.
         for (let gy=0; gy<rows; gy++){
           for (let gx=0; gx<cols; gx++){
-            drawTile(tiles[(gy*cols + gx) % tiles.length], gx*ts, gy*ts);
+            const filled = field[gy*cols + gx] === 1;
+            if (!filled) continue;
+            const img = tiles[(gy*cols + gx) % tiles.length];
+            drawTile(img, gx*ts, gy*ts);
           }
         }
       } else {
-        // map by bitmask
         for (let gy=0; gy<rows; gy++){
           for (let gx=0; gx<cols; gx++){
             const m = mask4(field, cols, rows, gx, gy);
-            if (m < 0) continue; // empty -> transparent
+            if (m < 0) continue;
             drawTile(tiles[m], gx*ts, gy*ts);
           }
         }
       }
 
-      // optional grid lines
       if (lineA > 0){
         ctx.save();
         ctx.globalAlpha = lineA;
@@ -1686,14 +1725,13 @@
       }
 
       ctx.restore();
-      el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)} • autotile ${tiles.length>=16 ? "16" : tiles.length}`;
+      el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)} • autotile ${Math.min(16, tiles.length)}`;
       el.autoHint.style.display = "block";
       return;
     } else {
       el.autoHint.style.display = "none";
     }
 
-    // other modes
     for (let gy=0; gy<rows; gy++){
       for (let gx=0; gx<cols; gx++){
         let img = tiles[0];
@@ -1737,7 +1775,7 @@
     el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)} • tiles ${tiles.length}`;
   }
 
-  // zoom/pan interactions
+  // Zoom/pan
   let panning=false;
   let panStart = {x:0,y:0, panX:0, panY:0};
 
@@ -1768,18 +1806,15 @@
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
 
-    const viewX = mx;
-    const viewY = my;
-
-    const worldX = state.cam.panX + viewX / state.cam.zoom;
-    const worldY = state.cam.panY + viewY / state.cam.zoom;
+    const worldX = state.cam.panX + mx / state.cam.zoom;
+    const worldY = state.cam.panY + my / state.cam.zoom;
 
     const delta = Math.sign(e.deltaY);
     const factor = (delta > 0) ? 0.9 : 1.111111;
     state.cam.zoom = clamp(state.cam.zoom * factor, 0.25, 20);
 
-    state.cam.panX = worldX - viewX / state.cam.zoom;
-    state.cam.panY = worldY - viewY / state.cam.zoom;
+    state.cam.panX = worldX - mx / state.cam.zoom;
+    state.cam.panY = worldY - my / state.cam.zoom;
 
     requestPreviewDraw();
   }, { passive:false });
@@ -1791,20 +1826,20 @@
     requestPreviewDraw();
   });
 
+  // Autotile refresh helpers
+  function invalidateAuto(){ state.autoField = null; requestPreviewDraw(); }
+
   el.btnNewAutoMap.addEventListener("click", ()=>{
-    // bump seed if you want a new field quickly (and invalidate cache)
     el.seed.value = String((parseInt(el.seed.value,10)||1) + 1);
-    state.autoField = null;
-    requestPreviewDraw();
+    invalidateAuto();
   });
 
-  // ---------- exports ----------
+  // Exports
   function exportWorkingTile(){
     const tmp = createCanvas(state.tileSize,state.tileSize);
     tmp.getContext("2d").drawImage(state.workCanvas,0,0);
     downloadCanvasPNG(tmp, `tile_${state.tileSize}px.png`);
   }
-
   function exportTileset(){
     const cols = state.cols;
     const rows = Math.ceil(state.capacity / cols);
@@ -1828,7 +1863,7 @@
     downloadCanvasPNG(atlas, `tileset_${state.tileSize}px_${state.capacity}tiles_${cols}cols.png`);
   }
 
-  // ---------- wiring ----------
+  // Wiring
   el.tileSize.addEventListener("change", ensureTileSize);
 
   el.capacity.addEventListener("change", ()=>{
@@ -1868,19 +1903,18 @@
   });
 
   el.previewMode.addEventListener("change", ()=>{
-    // invalidate autotile cache if switching into autotile mode
-    if (el.previewMode.value === "autotile16") state.autoField = null;
+    if (el.previewMode.value === "autotile16") invalidateAuto();
     requestPreviewDraw();
   });
 
-  el.gridCols.addEventListener("change", ()=>{ state.autoField = null; requestPreviewDraw(); });
-  el.gridRows.addEventListener("change", ()=>{ state.autoField = null; requestPreviewDraw(); });
+  el.gridCols.addEventListener("change", invalidateAuto);
+  el.gridRows.addEventListener("change", invalidateAuto);
   el.gridLine.addEventListener("input", requestPreviewDraw);
-  el.seed.addEventListener("change", ()=>{ state.autoField = null; requestPreviewDraw(); });
+  el.seed.addEventListener("change", invalidateAuto);
 
-  el.autoFill.addEventListener("input", ()=>{ state.autoField = null; requestPreviewDraw(); });
-  el.autoScale.addEventListener("change", ()=>{ state.autoField = null; requestPreviewDraw(); });
-  el.autoSmooth.addEventListener("input", ()=>{ state.autoField = null; requestPreviewDraw(); });
+  el.autoFill.addEventListener("input", invalidateAuto);
+  el.autoScale.addEventListener("change", invalidateAuto);
+  el.autoSmooth.addEventListener("input", invalidateAuto);
 
   el.editZoom.addEventListener("input", updateEditorCanvas);
 
@@ -1911,7 +1945,6 @@
     if (k==="i") setTool("picker");
   });
 
-  // ---------- init ----------
   function init(){
     state.tileSize = parseInt(el.tileSize.value,10);
     state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
@@ -1927,10 +1960,11 @@
 
     state.selectedForPreview.add(state.selectedSlot);
     updateSelCount();
-
     renderTilesetGrid();
+
     setTool("brush");
-    setStatus("Ready.");
+    applySimplifyPreset();
+    applySeamPreset();
 
     resizePreviewCanvasToFrame();
     window.addEventListener("resize", ()=>{
@@ -1938,15 +1972,16 @@
       requestPreviewDraw();
     });
 
-    applySimplifyPreset();
-    applySeamPreset();
+    setStatus("Ready.");
 
-    function tick(){
+    (function tick(){
       drawPreview();
       requestAnimationFrame(tick);
-    }
-    tick();
+    })();
   }
+
+  // Small helper: keep selection count accurate if you only have 1 tile selected
+  function updateSelCount(){ el.selCount.textContent = String(state.selectedForPreview.size); }
 
   init();
 })();
