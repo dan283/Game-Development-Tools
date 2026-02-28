@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>TileForge (v8) — Layers + Palette + Fill + Selections (Rect/Lasso) + Brush Preview</title>
+<title>TileForge — Single-file tileset generator/editor</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0d12; color:#e9eef7; }
-  header { padding: 12px 14px; border-bottom:1px solid #1c2330; background:#0d1220; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  header { padding:12px 14px; border-bottom:1px solid #1c2330; background:#0d1220; display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .title { font-weight:800; letter-spacing:.2px; }
   .sub { font-size:12px; opacity:.8; }
   .pill { font-size:11px; padding:3px 8px; border:1px solid #293246; border-radius:999px; opacity:.85; white-space:nowrap; }
@@ -92,6 +92,7 @@
 
   .toolRow { display:flex; gap:8px; flex-wrap:wrap; }
   .toolRow button { flex: 1 1 auto; }
+
   .workRow { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items:start; }
   .workBox { display:grid; gap:6px; }
 
@@ -104,18 +105,22 @@
   .layerItem.active{ outline:2px solid #e9eef7; outline-offset:2px; }
   .layerBtns{ display:flex; gap:6px; }
   .tinyBtn{ padding:6px 8px; font-size:12px; border-radius:10px; }
+
+  .selInfo { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  details summary { cursor:pointer; }
 </style>
 </head>
 <body>
 <header>
   <div>
-    <div class="title">TileForge (v8)</div>
-    <div class="sub">Added: Fill tool • Selections (Rect / Lasso) • Brush size preview overlay • Selection-aware brush/eraser/fill</div>
+    <div class="title">TileForge</div>
+    <div class="sub">Upload → fit to 32×32 • layers • palette edit • brush/eraser/picker/fill • rect/lasso select • seamless • simplify • tileset export • duplicate tile</div>
   </div>
-  <div class="pill">Single file • Alpha PNG export • 32px default</div>
+  <div class="pill">Single HTML file</div>
 </header>
 
 <main>
+  <!-- LEFT PANEL -->
   <section class="panel">
     <h2>Controls</h2>
     <div class="content">
@@ -159,7 +164,7 @@
         <label>Selected Slot (editing)
           <input id="slot" type="number" min="1" value="1" />
         </label>
-        <label>Upload auto-applies to slot
+        <label>Upload auto-saves to slot
           <select id="autoApplyUpload">
             <option value="on" selected>On</option>
             <option value="off">Off</option>
@@ -168,18 +173,18 @@
       </div>
 
       <div class="row">
-        <label>Effects apply to
-          <select id="effectScope">
-            <option value="active" selected>Active layer</option>
-            <option value="visible">All visible layers</option>
-            <option value="all">All layers</option>
-          </select>
-        </label>
         <label>Upload goes to
           <select id="uploadTarget">
             <option value="active" selected>Active layer</option>
             <option value="base">Base layer (L1)</option>
             <option value="replaceAll">Replace all layers</option>
+          </select>
+        </label>
+        <label>Effects apply to
+          <select id="effectScope">
+            <option value="active" selected>Active layer</option>
+            <option value="visible">All visible layers</option>
+            <option value="all">All layers</option>
           </select>
         </label>
       </div>
@@ -194,7 +199,7 @@
         <summary class="mini">Palette</summary>
         <div style="display:grid; gap:10px; margin-top:10px;">
           <div class="row">
-            <label>Selected color
+            <label>Selected swatch
               <input id="palColor" type="color" value="#ffffff" />
             </label>
             <label>Picked color
@@ -211,15 +216,14 @@
               <input id="autoPalCount" type="number" min="2" max="24" value="10" />
             </label>
             <label>&nbsp;
-              <button id="btnRebuildPalette">Rebuild palette from tile</button>
+              <button id="btnRebuildPalette">Rebuild from tile</button>
             </label>
           </div>
-          <div class="hint">Click a swatch to select it. Changing “Selected color” edits that swatch.</div>
         </div>
       </details>
 
       <details open>
-        <summary class="mini">Recolor / Replace</summary>
+        <summary class="mini">Replace / Quantize</summary>
         <div style="display:grid; gap:10px; margin-top:10px;">
           <div class="row">
             <label>From swatch #
@@ -230,7 +234,7 @@
             </label>
           </div>
           <div class="row">
-            <label>Tolerance (0 exact)
+            <label>Tolerance
               <input id="repTol" type="range" min="0" max="80" step="1" value="0" />
             </label>
             <label>Include transparent
@@ -260,20 +264,6 @@
             <button id="btnLayerDown">Move down</button>
             <button id="btnToggleVis">Toggle visibility</button>
           </div>
-          <div class="hint">Edits affect the active layer only. Editor view shows flattened visible layers + overlays.</div>
-        </div>
-      </details>
-
-      <details open>
-        <summary class="mini">Selection</summary>
-        <div style="display:grid; gap:10px; margin-top:10px;">
-          <div class="btnRow">
-            <button id="btnSelRect">Rect select (R)</button>
-            <button id="btnSelLasso">Lasso select (L)</button>
-            <button id="btnSelClear">Clear selection (Esc)</button>
-            <button id="btnSelInvert">Invert</button>
-          </div>
-          <div class="hint">Selection limits Brush / Eraser / Fill (bucket). Hold <span class="kbd">Shift</span> while selecting to <b>add</b>, hold <span class="kbd">Alt</span> to <b>subtract</b>.</div>
         </div>
       </details>
 
@@ -283,9 +273,9 @@
           <div class="row">
             <label>Preset
               <select id="seamPreset">
-                <option value="crisp" selected>Crisp (minimal blur)</option>
+                <option value="crisp" selected>Crisp</option>
                 <option value="balanced">Balanced</option>
-                <option value="strong">Strong (aggressive)</option>
+                <option value="strong">Strong</option>
                 <option value="custom">Custom</option>
               </select>
             </label>
@@ -294,19 +284,11 @@
             </label>
           </div>
           <div class="row">
-            <label>Guide Blend (0..1)
-              <input id="seamGuide" type="range" min="0" max="1" step="0.01" value="0.32" />
+            <label>Blend (0..1)
+              <input id="seamBlend" type="range" min="0" max="1" step="0.01" value="0.30" />
             </label>
-            <label>Edge Keep (0..1)
-              <input id="seamEdgeKeep" type="range" min="0" max="1" step="0.01" value="0.82" />
-            </label>
-          </div>
-          <div class="row">
-            <label>Band Curve
-              <input id="seamCurve" type="range" min="0.5" max="3" step="0.01" value="1.85" />
-            </label>
-            <label>Post Sharpen
-              <input id="seamSharpen" type="range" min="0" max="1" step="0.01" value="0.35" />
+            <label>Sharpen (0..1)
+              <input id="seamSharpen" type="range" min="0" max="1" step="0.01" value="0.25" />
             </label>
           </div>
           <div class="btnRow">
@@ -314,6 +296,7 @@
             <button id="btnUndoWork">Undo Working</button>
             <button id="btnResetWork">Reset From Slot</button>
           </div>
+          <div class="hint">Seamless uses “offset + blend band” (no heavy blur) and then optional sharpening.</div>
         </div>
       </details>
 
@@ -323,7 +306,7 @@
           <div class="row">
             <label>Preset
               <select id="simpPreset">
-                <option value="clean" selected>Clean Pixel (crisp)</option>
+                <option value="clean" selected>Clean Pixel</option>
                 <option value="photo">Noisy Photo → Pixel</option>
                 <option value="soft">Soft Stylized</option>
                 <option value="hi">High Contrast</option>
@@ -334,10 +317,20 @@
               <input id="simpColors" type="number" min="2" max="32" value="12" />
             </label>
           </div>
-
           <div class="row">
-            <label>Pre-smooth (0 = off)
+            <label>Pre-smooth (0..1)
               <input id="simpSmooth" type="range" min="0" max="1" step="0.01" value="0.06" />
+            </label>
+            <label>Dither
+              <select id="simpDither">
+                <option value="on" selected>On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label>Dither Amount
+              <input id="simpDitherAmt" type="range" min="0" max="1" step="0.01" value="0.55" />
             </label>
             <label>Edge Preserve
               <select id="simpEdge">
@@ -346,19 +339,6 @@
               </select>
             </label>
           </div>
-
-          <div class="row">
-            <label>Dither
-              <select id="simpDither">
-                <option value="on" selected>On</option>
-                <option value="off">Off</option>
-              </select>
-            </label>
-            <label>Dither Amount
-              <input id="simpDitherAmt" type="range" min="0" max="1" step="0.01" value="0.55" />
-            </label>
-          </div>
-
           <div class="btnRow">
             <button id="btnSimplify">Simplify (scope)</button>
           </div>
@@ -371,23 +351,30 @@
       </div>
 
       <div class="hint">
-        Hotkeys: <span class="kbd">Ctrl+Z</span> undo working • <span class="kbd">Ctrl+Shift+Z</span> undo tileset •
+        Hotkeys:
+        <span class="kbd">Ctrl+Z</span> undo working • <span class="kbd">Ctrl+Shift+Z</span> undo tileset •
         <span class="kbd">B</span> brush • <span class="kbd">E</span> eraser • <span class="kbd">I</span> picker •
-        <span class="kbd">F</span> fill • <span class="kbd">R</span> rect select • <span class="kbd">L</span> lasso select • <span class="kbd">Esc</span> clear selection
+        <span class="kbd">G</span> fill • <span class="kbd">R</span> rect select • <span class="kbd">L</span> lasso •
+        <span class="kbd">Esc</span> clear selection
       </div>
     </div>
 
     <div class="footer">
-      <span class="mini">Preview: drag pan • wheel zoom • multi-select (Ctrl/Shift).</span>
+      <span class="mini">Edits affect active layer; working tile is flattened visible layers.</span>
       <span class="mini mono" id="status">Ready.</span>
     </div>
   </section>
 
+  <!-- RIGHT STAGE -->
   <section class="stage">
+    <!-- Tileset / preview -->
     <div class="card">
       <div class="cardHead">
         <strong>Tileset</strong>
-        <span class="mini" id="tilesetInfo"></span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button id="btnDupTile" class="tinyBtn" title="Duplicate selected slot to the first empty slot">Duplicate Tile</button>
+          <span class="mini" id="tilesetInfo"></span>
+        </div>
       </div>
 
       <div class="cardBody" style="min-height:0;">
@@ -396,9 +383,9 @@
             <div class="slotTop">
               <div class="mini">Slots</div>
               <div class="btnRow" style="margin:0;">
-                <button id="selAll" title="Select all for preview">All</button>
-                <button id="selNone" title="Clear preview selection">None</button>
-                <button id="selInvert" title="Invert preview selection">Invert</button>
+                <button id="selAll">All</button>
+                <button id="selNone">None</button>
+                <button id="selInvert">Invert</button>
               </div>
             </div>
             <div class="hint" style="margin-bottom:8px;">
@@ -422,11 +409,8 @@
                   <option value="grid" selected>Tile Grid (cycle)</option>
                   <option value="random">Random (selected tiles)</option>
                   <option value="checker">Checker (first 2)</option>
-                  <option value="stripesRow">Row stripes (cycle)</option>
-                  <option value="stripesCol">Column stripes (cycle)</option>
-                  <option value="noise">Noise regions (ground)</option>
-                  <option value="autotile16">Autotile (bitmask 16)</option>
-                  <option value="tileset">Full Tileset Atlas</option>
+                  <option value="stripesRow">Row stripes</option>
+                  <option value="stripesCol">Col stripes</option>
                 </select>
               </label>
             </div>
@@ -447,23 +431,11 @@
               <label>Seed
                 <input id="seed" type="number" value="1" />
               </label>
-              <label>Autotile Fill %
-                <input id="autoFill" type="range" min="0.1" max="0.9" step="0.01" value="0.55" />
-              </label>
-              <label>Autotile Scale
-                <input id="autoScale" type="number" min="1" max="12" value="3" />
-              </label>
-            </div>
-
-            <div class="previewControls3">
-              <label>Autotile Smoothing
-                <input id="autoSmooth" type="range" min="0" max="1" step="0.01" value="0" />
-              </label>
               <label>Reset View
                 <button id="btnResetView">Reset</button>
               </label>
-              <label>Autotile Map
-                <button id="btnNewAutoMap">New</button>
+              <label>&nbsp;
+                <span class="mini">Zoom: wheel • Pan: drag</span>
               </label>
             </div>
 
@@ -475,27 +447,33 @@
             <div class="mini">
               Selected for preview: <span class="mono" id="selCount">0</span> • Editing slot: <span class="mono" id="slotLabel">1</span>
             </div>
-            <div class="hint" id="autoHint">
-              Autotile expects <b>16 tiles selected</b>. If fewer, it shows the filled/empty field so Fill/Scale/Smoothing still affects preview.
-            </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Editor -->
     <div class="card">
       <div class="cardHead">
         <div>
           <strong>Working Tile + Editor</strong>
-          <div class="mini" id="workInfo">No image loaded — empty tile.</div>
+          <div class="mini" id="workInfo">Empty tile.</div>
         </div>
-        <div class="mini">Tool: <span class="mono" id="toolLabel">brush</span></div>
+        <div class="selInfo">
+          <span class="mini">Tool: <span class="mono" id="toolLabel">brush</span></span>
+          <span class="mini">Selection: <span class="mono" id="selLabel">none</span></span>
+          <button id="btnClearSel" class="tinyBtn">Clear Sel</button>
+          <label class="mini" style="display:flex; gap:6px; align-items:center;">
+            <input id="selLimit" type="checkbox" checked />
+            Limit edits to selection
+          </label>
+        </div>
       </div>
 
       <div class="cardBody" style="display:grid; gap:10px; min-height:0;">
         <div class="workRow">
           <div class="workBox">
-            <div class="mini">Flattened (visible layers)</div>
+            <div class="mini">Flattened</div>
             <canvas id="work" width="32" height="32"></canvas>
           </div>
           <div class="workBox">
@@ -505,7 +483,7 @@
                 <input id="editZoom" type="range" min="6" max="24" value="10" />
               </label>
               <label>Brush Size
-                <input id="brush" type="number" min="1" max="12" value="1" />
+                <input id="brush" type="number" min="1" max="16" value="1" />
               </label>
             </div>
           </div>
@@ -526,21 +504,21 @@
           <button id="toolBrush">Brush (B)</button>
           <button id="toolEraser">Eraser (E)</button>
           <button id="toolPicker">Picker (I)</button>
-          <button id="toolFill">Fill (F)</button>
-          <button id="toolRect">Rect Sel (R)</button>
-          <button id="toolLasso">Lasso Sel (L)</button>
+          <button id="toolFill">Fill (G)</button>
+          <button id="toolRectSel">Rect Sel (R)</button>
+          <button id="toolLasso">Lasso (L)</button>
         </div>
 
         <canvas id="editor" width="320" height="320"></canvas>
 
         <div class="hint">
-          Brush size preview shows on hover. Selection overlay is highlighted. Fill uses the <b>active layer</b> color under cursor (respecting selection).
+          Fill uses flood fill on the <b>active layer</b>. Rect Sel: drag (Shift adds). Lasso: drag a loop. <span class="kbd">Esc</span> clears.
         </div>
       </div>
 
       <div class="footer">
-        <span class="mini">Editor: hover shows brush • drag draws/selects • Shift add • Alt subtract</span>
-        <span class="mini mono">Selection-aware tools</span>
+        <span class="mini">Brush preview shows stroke bounds; selection drawn dashed.</span>
+        <span class="mini mono">Active layer edits only</span>
       </div>
     </div>
   </section>
@@ -558,28 +536,30 @@
     btnFit: $("btnFit"), btnApplyToSlot: $("btnApplyToSlot"),
     btnUndoTileset: $("btnUndoTileset"),
 
+    // palette
     palColor: $("palColor"), pickedColor: $("pickedColor"),
     btnAddSwatch: $("btnAddSwatch"), btnAddPicked: $("btnAddPicked"), btnDelSwatch: $("btnDelSwatch"),
     autoPalCount: $("autoPalCount"), btnRebuildPalette: $("btnRebuildPalette"),
 
+    // recolor
     repFrom: $("repFrom"), repTo: $("repTo"), repTol: $("repTol"), repAlpha: $("repAlpha"),
     btnReplace: $("btnReplace"), btnQuantize: $("btnQuantize"),
 
+    // layers
     btnAddLayer: $("btnAddLayer"), btnDupLayer: $("btnDupLayer"), btnDelLayer: $("btnDelLayer"),
     btnLayerUp: $("btnLayerUp"), btnLayerDown: $("btnLayerDown"), btnToggleVis: $("btnToggleVis"),
     layerList: $("layerList"),
 
-    btnSelRect: $("btnSelRect"), btnSelLasso: $("btnSelLasso"), btnSelClear: $("btnSelClear"), btnSelInvert: $("btnSelInvert"),
-
+    // seamless
     seamPreset: $("seamPreset"), seamMargin: $("seamMargin"),
-    seamGuide: $("seamGuide"), seamEdgeKeep: $("seamEdgeKeep"),
-    seamCurve: $("seamCurve"), seamSharpen: $("seamSharpen"),
+    seamBlend: $("seamBlend"), seamSharpen: $("seamSharpen"),
     btnSeamless: $("btnSeamless"),
     btnResetWork: $("btnResetWork"), btnUndoWork: $("btnUndoWork"),
 
+    // simplify
     simpPreset: $("simpPreset"), simpColors: $("simpColors"),
-    simpSmooth: $("simpSmooth"), simpEdge: $("simpEdge"),
-    simpDither: $("simpDither"), simpDitherAmt: $("simpDitherAmt"),
+    simpSmooth: $("simpSmooth"), simpDither: $("simpDither"), simpDitherAmt: $("simpDitherAmt"),
+    simpEdge: $("simpEdge"),
     btnSimplify: $("btnSimplify"),
 
     btnExportTile: $("btnExportTile"), btnExportSet: $("btnExportSet"),
@@ -587,33 +567,31 @@
 
     tilesetInfo: $("tilesetInfo"), slotGrid: $("slotGrid"),
     selAll: $("selAll"), selNone: $("selNone"), selInvert: $("selInvert"),
+    btnDupTile: $("btnDupTile"),
 
     previewFrame: $("previewFrame"), bigPreview: $("bigPreview"), hud: $("hud"),
     previewSize: $("previewSize"), previewMode: $("previewMode"),
     gridCols: $("gridCols"), gridRows: $("gridRows"), gridLine: $("gridLine"),
     seed: $("seed"),
-    autoFill: $("autoFill"), autoScale: $("autoScale"), autoSmooth: $("autoSmooth"),
-    btnResetView: $("btnResetView"), btnNewAutoMap: $("btnNewAutoMap"),
+    btnResetView: $("btnResetView"),
     selCount: $("selCount"), slotLabel: $("slotLabel"),
-    autoHint: $("autoHint"),
 
     work: $("work"), workInfo: $("workInfo"),
     editZoom: $("editZoom"), brush: $("brush"),
     swatches: $("swatches"),
     toolBrush: $("toolBrush"), toolEraser: $("toolEraser"), toolPicker: $("toolPicker"),
-    toolFill: $("toolFill"), toolRect: $("toolRect"), toolLasso: $("toolLasso"),
+    toolFill: $("toolFill"), toolRectSel: $("toolRectSel"), toolLasso: $("toolLasso"),
     toolLabel: $("toolLabel"),
     editor: $("editor"),
+    selLabel: $("selLabel"),
+    btnClearSel: $("btnClearSel"),
+    selLimit: $("selLimit"),
   };
 
   function setStatus(msg){ el.status.textContent = msg; }
   function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
   function createCanvas(w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
-  function ctx2d(c){
-    const ctx = c.getContext("2d", { willReadFrequently: true });
-    ctx.imageSmoothingEnabled = false;
-    return ctx;
-  }
+  function ctx2d(c){ const ctx = c.getContext("2d", { willReadFrequently:true }); ctx.imageSmoothingEnabled=false; return ctx; }
   function downloadCanvasPNG(canvas, filename){
     const a = document.createElement("a");
     a.download = filename;
@@ -630,6 +608,7 @@
     return `#${to(r)}${to(g)}${to(b)}`;
   }
   function dist3(a,b){ const dr=a[0]-b[0], dg=a[1]-b[1], db=a[2]-b[2]; return Math.sqrt(dr*dr+dg*dg+db*db); }
+  function cloneImageData(img){ const out = new ImageData(img.width,img.height); out.data.set(img.data); return out; }
 
   const BAYER4 = [
     [ 0,  8,  2, 10],
@@ -645,53 +624,97 @@
     selectedSlot: 0,
     selectedForPreview: new Set(),
     lastClickedIndex: 0,
+    tiles: [],
 
-    tiles: [], // flattened ImageData|null
     originalImage: null,
 
-    // layers (bottom->top). Each is {name, visible, img: ImageData}
     layers: [],
     activeLayer: 0,
 
-    // palette
     palette: [[255,255,255],[0,0,0]],
     selectedSwatch: 0,
     picked: [255,255,255],
 
-    // editor tools
-    tool: "brush", // brush|eraser|picker|fill|selRect|selLasso
-    hover: { x:-1, y:-1, inside:false },
-
-    // selection mask
-    selection: {
-      active: false,
-      mask: null, // Uint8Array size w*h (1 selected)
-      // temp selection while dragging:
-      mode: "replace", // replace|add|sub
-      rectStart: null,
-      rectEnd: null,
-      lassoPts: null,
-    },
-
-    // undo
-    workUndo: [],      // snapshots of layers + palette + selection
+    tool: "brush",
+    workUndo: [],
     tilesetUndo: [],
 
-    // preview cam
     cam: { zoom: 1, panX: 0, panY: 0 },
 
-    // autotile cache
-    autoField: null,
-    autoFieldCols: 0,
-    autoFieldRows: 0,
-    autoFieldSeed: 1,
-    _autoFill: 0, _autoScale: 0, _autoSmooth: 0,
+    hover: { x: -1, y: -1 },
+
+    selection: null,
+    selectionType: "none",
+    rectDrag: null,
+    lasso: { dragging:false, pts: [] },
   };
 
-  function cloneImageData(img){
-    const out = new ImageData(img.width, img.height);
-    out.data.set(img.data);
-    return out;
+  // ---------- selection ----------
+  function ensureSelectionMask(){
+    if (!state.selection || state.selection.length !== state.tileSize*state.tileSize){
+      state.selection = new Uint8Array(state.tileSize*state.tileSize);
+    }
+  }
+  function anySelectionActive(){
+    if (!state.selection) return false;
+    for (let i=0;i<state.selection.length;i++) if (state.selection[i]) return true;
+    return false;
+  }
+  function isSelected(x,y){
+    if (!el.selLimit.checked) return true;
+    if (!anySelectionActive()) return true;
+    return !!state.selection[y*state.tileSize + x];
+  }
+  function clearSelection(){
+    state.selection = null;
+    state.selectionType = "none";
+    el.selLabel.textContent = "none";
+    requestEditorRedraw();
+  }
+  function applyRectSelection(x0,y0,x1,y1, add){
+    ensureSelectionMask();
+    if (!add) state.selection.fill(0);
+    const w=state.tileSize, h=state.tileSize;
+    const loX = clamp(Math.min(x0,x1),0,w-1);
+    const hiX = clamp(Math.max(x0,x1),0,w-1);
+    const loY = clamp(Math.min(y0,y1),0,h-1);
+    const hiY = clamp(Math.max(y0,y1),0,h-1);
+    for (let y=loY; y<=hiY; y++){
+      for (let x=loX; x<=hiX; x++) state.selection[y*w + x] = 1;
+    }
+  }
+  function rasterizePolygonToMask(points, add){
+    ensureSelectionMask();
+    if (!add) state.selection.fill(0);
+    const w=state.tileSize, h=state.tileSize;
+    if (points.length < 3) return;
+
+    let minX=1e9, minY=1e9, maxX=-1e9, maxY=-1e9;
+    for (const p of points){
+      minX=Math.min(minX,p.x); minY=Math.min(minY,p.y);
+      maxX=Math.max(maxX,p.x); maxY=Math.max(maxY,p.y);
+    }
+    minX = clamp(Math.floor(minX),0,w-1);
+    minY = clamp(Math.floor(minY),0,h-1);
+    maxX = clamp(Math.ceil(maxX),0,w-1);
+    maxY = clamp(Math.ceil(maxY),0,h-1);
+
+    function pip(px,py){
+      let inside=false;
+      for (let i=0, j=points.length-1; i<points.length; j=i++){
+        const xi=points[i].x, yi=points[i].y;
+        const xj=points[j].x, yj=points[j].y;
+        const intersect = ((yi>py)!==(yj>py)) && (px < (xj-xi)*(py-yi)/(yj-yi+1e-12) + xi);
+        if (intersect) inside=!inside;
+      }
+      return inside;
+    }
+
+    for (let y=minY; y<=maxY; y++){
+      for (let x=minX; x<=maxX; x++){
+        if (pip(x+0.5,y+0.5)) state.selection[y*w + x] = 1;
+      }
+    }
   }
 
   // ---------- layers ----------
@@ -706,28 +729,17 @@
   }
   function renameDefaultLayers(){
     for (let i=0;i<state.layers.length;i++){
-      if (!state.layers[i].name || state.layers[i].name.startsWith("L")) state.layers[i].name = `L${i+1}`;
+      if (!state.layers[i].name) state.layers[i].name = `L${i+1}`;
     }
   }
-
-  function cloneSelection(sel){
-    return {
-      active: sel.active,
-      mask: sel.mask ? new Uint8Array(sel.mask) : null,
-      mode: sel.mode,
-      rectStart: sel.rectStart ? {x:sel.rectStart.x,y:sel.rectStart.y} : null,
-      rectEnd: sel.rectEnd ? {x:sel.rectEnd.x,y:sel.rectEnd.y} : null,
-      lassoPts: sel.lassoPts ? sel.lassoPts.map(p=>({x:p.x,y:p.y})) : null,
-    };
-  }
-
   function snapshotWorking(){
     state.workUndo.push({
       layers: state.layers.map(l => ({ name:l.name, visible:l.visible, img: cloneImageData(l.img) })),
       activeLayer: state.activeLayer,
       palette: state.palette.map(c => [c[0],c[1],c[2]]),
       selectedSwatch: state.selectedSwatch,
-      selection: cloneSelection(state.selection),
+      selection: state.selection ? new Uint8Array(state.selection) : null,
+      selectionType: state.selectionType,
     });
     if (state.workUndo.length > 60) state.workUndo.shift();
   }
@@ -735,20 +747,19 @@
     if (!state.workUndo.length) return;
     const s = state.workUndo.pop();
     state.layers = s.layers.map(l => ({ name:l.name, visible:l.visible, img: cloneImageData(l.img) }));
-    state.activeLayer = clamp(s.activeLayer, 0, state.layers.length-1);
-    state.palette = s.palette.map(c => [c[0],c[1],c[2]]);
-    state.selectedSwatch = clamp(s.selectedSwatch, 0, state.palette.length-1);
-    state.selection = cloneSelection(s.selection);
-    if (!state.selection.mask && state.selection.active) state.selection.active = false;
-
+    state.activeLayer = clamp(s.activeLayer,0,state.layers.length-1);
+    state.palette = s.palette.map(c=>[c[0],c[1],c[2]]);
+    state.selectedSwatch = clamp(s.selectedSwatch,0,state.palette.length-1);
+    state.selection = s.selection ? new Uint8Array(s.selection) : null;
+    state.selectionType = s.selectionType || "none";
+    el.selLabel.textContent = state.selectionType;
     syncPaletteUI();
-    renderLayersUI();
     renderPaletteUI();
+    renderLayersUI();
     syncWorkToDisplay();
     requestPreviewDraw();
     setStatus("Undo (working).");
   }
-
   function getScopeLayerIndices(scope){
     if (scope === "active") return [state.activeLayer];
     if (scope === "visible"){
@@ -758,7 +769,6 @@
     }
     return [...Array(state.layers.length)].map((_,i)=>i);
   }
-
   function flattenVisibleToImageData(){
     const w=state.tileSize, h=state.tileSize;
     const out = new ImageData(w,h);
@@ -772,7 +782,6 @@
         if (sa<=0) continue;
         const da = d[p+3]/255;
         const outA = sa + da*(1-sa);
-        if (outA<=0){ d[p+3]=0; continue; }
         d[p]   = Math.round((s[p]*sa + d[p]*da*(1-sa)) / outA);
         d[p+1] = Math.round((s[p+1]*sa + d[p+1]*da*(1-sa)) / outA);
         d[p+2] = Math.round((s[p+2]*sa + d[p+2]*da*(1-sa)) / outA);
@@ -781,7 +790,6 @@
     }
     return out;
   }
-
   function getFlattenedPixel(x,y){
     const w=state.tileSize;
     const idx = (y*w+x)*4;
@@ -801,117 +809,54 @@
     return [Math.round(r),Math.round(g),Math.round(b),Math.round(a*255)];
   }
 
-  // ---------- selection ----------
-  function ensureSelectionMask(){
-    const w=state.tileSize, h=state.tileSize;
-    if (!state.selection.mask || state.selection.mask.length !== w*h){
-      state.selection.mask = new Uint8Array(w*h);
-      state.selection.active = false;
-    }
-  }
-  function clearSelection(){
-    ensureSelectionMask();
-    state.selection.mask.fill(0);
-    state.selection.active = false;
-    state.selection.rectStart = null;
-    state.selection.rectEnd = null;
-    state.selection.lassoPts = null;
-    syncWorkToDisplay();
-    setStatus("Selection cleared.");
-  }
-  function invertSelection(){
-    ensureSelectionMask();
-    for (let i=0;i<state.selection.mask.length;i++){
-      state.selection.mask[i] = state.selection.mask[i] ? 0 : 1;
-    }
-    state.selection.active = true;
-    syncWorkToDisplay();
-    setStatus("Selection inverted.");
-  }
-  function selectionModeFromEvent(e){
-    if (e.altKey) return "sub";
-    if (e.shiftKey) return "add";
-    return "replace";
-  }
-  function applySelectionOperation(newMask, mode){
-    ensureSelectionMask();
-    const m = state.selection.mask;
-    if (mode === "replace"){
-      m.set(newMask);
-    } else if (mode === "add"){
-      for (let i=0;i<m.length;i++) m[i] = (m[i] || newMask[i]) ? 1 : 0;
-    } else { // sub
-      for (let i=0;i<m.length;i++) m[i] = (m[i] && !newMask[i]) ? 1 : 0;
-    }
-    state.selection.active = true;
-  }
-  function rectMask(x0,y0,x1,y1){
-    const w=state.tileSize, h=state.tileSize;
-    const m = new Uint8Array(w*h);
-    const xa = clamp(Math.min(x0,x1),0,w-1);
-    const xb = clamp(Math.max(x0,x1),0,w-1);
-    const ya = clamp(Math.min(y0,y1),0,h-1);
-    const yb = clamp(Math.max(y0,y1),0,h-1);
-    for (let y=ya;y<=yb;y++){
-      for (let x=xa;x<=xb;x++){
-        m[y*w+x]=1;
-      }
-    }
-    return m;
-  }
-  function pointInPoly(x,y, pts){
-    let inside=false;
-    for (let i=0,j=pts.length-1;i<pts.length;j=i++){
-      const xi=pts[i].x, yi=pts[i].y;
-      const xj=pts[j].x, yj=pts[j].y;
-      const intersect = ((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/((yj-yi)||1e-9) + xi);
-      if (intersect) inside=!inside;
-    }
-    return inside;
-  }
-  function lassoMask(pts){
-    const w=state.tileSize, h=state.tileSize;
-    const m = new Uint8Array(w*h);
-    if (!pts || pts.length < 3) return m;
-    // simple bounding box speedup
-    let minX=w, minY=h, maxX=0, maxY=0;
-    for (const p of pts){ minX=Math.min(minX,p.x); minY=Math.min(minY,p.y); maxX=Math.max(maxX,p.x); maxY=Math.max(maxY,p.y); }
-    minX=clamp(minX,0,w-1); maxX=clamp(maxX,0,w-1);
-    minY=clamp(minY,0,h-1); maxY=clamp(maxY,0,h-1);
-    for (let y=minY;y<=maxY;y++){
-      for (let x=minX;x<=maxX;x++){
-        if (pointInPoly(x+0.5,y+0.5,pts)) m[y*w+x]=1;
-      }
-    }
-    return m;
-  }
-  function isSelectedPixel(x,y){
-    if (!state.selection.active) return true;
-    ensureSelectionMask();
-    return state.selection.mask[y*state.tileSize+x] === 1;
-  }
-
   // ---------- tileset undo ----------
   function pushTilesetUndo(){
-    const snap = {
+    state.tilesetUndo.push({
       tiles: state.tiles.map(t => t ? cloneImageData(t) : null),
       selectedSlot: state.selectedSlot,
       selectedForPreview: new Set([...state.selectedForPreview]),
-    };
-    state.tilesetUndo.push(snap);
+    });
     if (state.tilesetUndo.length > 30) state.tilesetUndo.shift();
   }
   function undoTileset(){
     if (!state.tilesetUndo.length) return;
     const snap = state.tilesetUndo.pop();
     state.tiles = snap.tiles.map(t => t ? cloneImageData(t) : null);
-    state.selectedSlot = clamp(snap.selectedSlot, 0, state.capacity-1);
-    state.selectedForPreview = new Set([...snap.selectedForPreview].filter(i => i>=0 && i<state.capacity));
+    state.selectedSlot = clamp(snap.selectedSlot,0,state.capacity-1);
+    state.selectedForPreview = new Set([...snap.selectedForPreview].filter(i=>i>=0&&i<state.capacity));
     el.slot.value = String(state.selectedSlot+1);
     el.slotLabel.textContent = String(state.selectedSlot+1);
+    el.selCount.textContent = String(state.selectedForPreview.size);
     renderTilesetGrid();
     requestPreviewDraw();
     setStatus("Undo (tileset).");
+  }
+
+  // ---------- duplicate tile (FIRST EMPTY SLOT) ----------
+  function duplicateSelectedTileToFirstEmpty(){
+    const srcIdx = state.selectedSlot;
+    const src = state.tiles[srcIdx];
+    if (!src){ setStatus("Selected slot is empty — nothing to duplicate."); return; }
+
+    let dstIdx = state.tiles.findIndex(t => !t);
+    if (dstIdx === -1){
+      setStatus("No empty slot available. Increase Tileset Capacity.");
+      return;
+    }
+
+    pushTilesetUndo();
+    state.tiles[dstIdx] = cloneImageData(src);
+
+    state.selectedForPreview.add(dstIdx);
+    el.selCount.textContent = String(state.selectedForPreview.size);
+
+    state.selectedSlot = dstIdx;
+    el.slot.value = String(dstIdx+1);
+    el.slotLabel.textContent = String(dstIdx+1);
+
+    renderTilesetGrid();
+    requestPreviewDraw();
+    setStatus(`Duplicated slot ${srcIdx+1} → slot ${dstIdx+1}.`);
   }
 
   // ---------- palette ----------
@@ -941,7 +886,6 @@
     }
     return best;
   }
-
   function renderPaletteUI(){
     el.swatches.innerHTML = "";
     state.palette.forEach((c, idx)=>{
@@ -966,7 +910,6 @@
     el.repFrom.value = String(clamp(parseInt(el.repFrom.value||"1",10),1,state.palette.length));
     el.repTo.value = String(clamp(parseInt(el.repTo.value||"1",10),1,state.palette.length));
   }
-
   function rebuildPaletteFromFlattened(){
     const n = clamp(parseInt(el.autoPalCount.value,10) || 10, 2, 24);
     const flat = flattenVisibleToImageData();
@@ -977,7 +920,7 @@
     setStatus("Palette rebuilt from flattened tile.");
   }
 
-  // ---------- tileset storage ----------
+  // ---------- sizing / tileset storage ----------
   function rebuildTilesetStorage(){
     state.capacity = parseInt(el.capacity.value,10);
     const old = state.tiles;
@@ -1015,9 +958,6 @@
     for (const L of state.layers){
       L.img = resampleImageDataNearest(L.img, newSize);
     }
-    ensureSelectionMask();
-    // if selection existed, keep it by resampling nearest (simple): rebuild by selecting all pixels that were selected after resize
-    // (since sizes changed, best is to clear selection to avoid surprises)
     clearSelection();
   }
 
@@ -1026,11 +966,7 @@
     if (newSize === state.tileSize) return;
     resampleAllToSize(newSize);
     state.tileSize = newSize;
-
-    el.work.width = newSize;
-    el.work.height = newSize;
-    el.work.getContext("2d").imageSmoothingEnabled = false;
-
+    el.work.width = newSize; el.work.height = newSize;
     updateEditorCanvas();
     renderLayersUI();
     syncWorkToDisplay();
@@ -1060,13 +996,9 @@
 
   function renderTilesetGrid(){
     el.slotGrid.innerHTML = "";
-    el.slotGrid.style.gridTemplateColumns = `repeat(6, 1fr)`;
-
     for (let i=0;i<state.capacity;i++){
       const cell = document.createElement("div");
-      const isEdit = i===state.selectedSlot;
-      const isMulti = state.selectedForPreview.has(i);
-      cell.className = "cell" + (isEdit ? " sel" : "") + (isMulti ? " multi" : "");
+      cell.className = "cell" + (i===state.selectedSlot ? " sel" : "") + (state.selectedForPreview.has(i) ? " multi" : "");
 
       const badge = document.createElement("div");
       badge.className = "badge";
@@ -1111,7 +1043,6 @@
 
         snapshotWorking();
         ensureAtLeastOneLayer();
-        clearSelection();
         for (let li=0; li<state.layers.length; li++){
           state.layers[li].img = new ImageData(state.tileSize,state.tileSize);
           state.layers[li].visible = true;
@@ -1122,6 +1053,7 @@
         state.activeLayer = 0;
         renameDefaultLayers();
         renderLayersUI();
+        clearSelection();
         syncWorkToDisplay();
         rebuildPaletteFromFlattened();
 
@@ -1159,7 +1091,6 @@
   function renderLayersUI(){
     el.layerList.innerHTML = "";
     renameDefaultLayers();
-
     state.layers.forEach((L, i)=>{
       const item = document.createElement("div");
       item.className = "layerItem" + (i===state.activeLayer ? " active" : "");
@@ -1177,9 +1108,7 @@
       const eye = document.createElement("button");
       eye.className="tinyBtn";
       eye.textContent = L.visible ? "👁" : "🚫";
-      eye.title = "Toggle visibility";
       eye.addEventListener("click", (e)=>{ e.stopPropagation(); snapshotWorking(); L.visible = !L.visible; renderLayersUI(); syncWorkToDisplay(); requestPreviewDraw(); });
-
       btns.appendChild(eye);
 
       item.appendChild(chk);
@@ -1209,7 +1138,7 @@
     const src = state.layers[state.activeLayer];
     const copy = { name: `${src.name} copy`, visible:true, img: cloneImageData(src.img) };
     state.layers.splice(state.activeLayer+1, 0, copy);
-    state.activeLayer = state.activeLayer+1;
+    state.activeLayer++;
     renderLayersUI();
     syncWorkToDisplay();
     setStatus("Layer duplicated.");
@@ -1251,7 +1180,7 @@
   el.btnLayerDown.addEventListener("click", ()=>moveLayer(1));
   el.btnToggleVis.addEventListener("click", toggleVis);
 
-  // ---------- working display + editor ----------
+  // ---------- working + editor drawing ----------
   function syncWorkToDisplay(){
     const ctx = el.work.getContext("2d");
     ctx.imageSmoothingEnabled = false;
@@ -1266,6 +1195,7 @@
         ctx.fillRect(x,y,cell,cell);
       }
     }
+
     const flat = flattenVisibleToImageData();
     const tmp = createCanvas(w,h);
     tmp.getContext("2d").putImageData(flat,0,0);
@@ -1279,27 +1209,106 @@
     state.tool = t;
     el.toolLabel.textContent = t;
     const on="#e9eef7", off="#293246";
-    const setB = (btn, ok)=> btn.style.borderColor = ok ? on : off;
-
-    setB(el.toolBrush, t==="brush");
-    setB(el.toolEraser, t==="eraser");
-    setB(el.toolPicker, t==="picker");
-    setB(el.toolFill, t==="fill");
-    setB(el.toolRect, t==="selRect");
-    setB(el.toolLasso, t==="selLasso");
-
-    // also sync selection buttons
-    // (just for clarity in UI; no heavy logic)
+    const map = { brush: el.toolBrush, eraser: el.toolEraser, picker: el.toolPicker, fill: el.toolFill, rectSel: el.toolRectSel, lasso: el.toolLasso };
+    Object.entries(map).forEach(([k,btn])=> btn.style.borderColor = (k===t) ? on : off);
+    setStatus(`Tool: ${t}`);
+    requestEditorRedraw();
   }
+
+  let editorDirty = true;
+  function requestEditorRedraw(){ editorDirty = true; }
 
   function updateEditorCanvas(){
     const z = parseInt(el.editZoom.value,10);
     el.editor.width = state.tileSize * z;
     el.editor.height = state.tileSize * z;
-    drawEditor();
+    requestEditorRedraw();
+  }
+
+  function drawDashedSelection(ctx, z){
+    if (!anySelectionActive()) return;
+    const w=state.tileSize, h=state.tileSize;
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "#e9eef7";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const sel = state.selection[y*w+x]===1;
+        if (!sel) continue;
+        const n = (y>0) ? state.selection[(y-1)*w+x] : 0;
+        const s = (y<h-1) ? state.selection[(y+1)*w+x] : 0;
+        const wv = (x>0) ? state.selection[y*w+(x-1)] : 0;
+        const e = (x<w-1) ? state.selection[y*w+(x+1)] : 0;
+        if (n && s && wv && e) continue;
+        const px = x*z, py = y*z;
+        ctx.rect(px+0.5, py+0.5, z-1, z-1);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBrushPreview(ctx, z){
+    const x = state.hover.x, y = state.hover.y;
+    if (x<0 || y<0 || x>=state.tileSize || y>=state.tileSize) return;
+    if (state.tool === "picker" || state.tool === "rectSel" || state.tool === "lasso") return;
+
+    const bsz = clamp(parseInt(el.brush.value,10) || 1, 1, 16);
+    const half = Math.floor(bsz/2);
+    const x0 = clamp(x-half, 0, state.tileSize-1);
+    const y0 = clamp(y-half, 0, state.tileSize-1);
+    const x1 = clamp(x-half+bsz-1, 0, state.tileSize-1);
+    const y1 = clamp(y-half+bsz-1, 0, state.tileSize-1);
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "#7dd3fc";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.strokeRect(x0*z + 1, y0*z + 1, (x1-x0+1)*z - 2, (y1-y0+1)*z - 2);
+    ctx.restore();
+  }
+
+  function drawRectDrag(ctx, z){
+    if (!state.rectDrag) return;
+    const {x0,y0,x1,y1} = state.rectDrag;
+    const loX = Math.min(x0,x1), hiX = Math.max(x0,x1);
+    const loY = Math.min(y0,y1), hiY = Math.max(y0,y1);
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "#fbbf24";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,3]);
+    ctx.strokeRect(loX*z + 1, loY*z + 1, (hiX-loX+1)*z - 2, (hiY-loY+1)*z - 2);
+    ctx.restore();
+  }
+
+  function drawLassoPath(ctx, z){
+    if (!state.lasso.dragging || state.lasso.pts.length < 2) return;
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = "#fbbf24";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,3]);
+    ctx.beginPath();
+    const p0 = state.lasso.pts[0];
+    ctx.moveTo((p0.x+0.5)*z, (p0.y+0.5)*z);
+    for (let i=1;i<state.lasso.pts.length;i++){
+      const p = state.lasso.pts[i];
+      ctx.lineTo((p.x+0.5)*z, (p.y+0.5)*z);
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawEditor(){
+    if (!editorDirty) return;
+    editorDirty = false;
+
     const z = parseInt(el.editZoom.value,10);
     const ctx = el.editor.getContext("2d");
     ctx.imageSmoothingEnabled = false;
@@ -1307,6 +1316,7 @@
     const W = state.tileSize*z;
     const H = state.tileSize*z;
 
+    // checker bg
     const cell = Math.max(8, Math.floor(z*0.8));
     ctx.clearRect(0,0,W,H);
     for (let y=0;y<H;y+=cell){
@@ -1317,56 +1327,14 @@
       }
     }
 
-    // flattened
+    // flattened draw
     const flat = flattenVisibleToImageData();
     const tmp = createCanvas(state.tileSize, state.tileSize);
     tmp.getContext("2d").putImageData(flat,0,0);
     ctx.drawImage(tmp, 0,0, state.tileSize, state.tileSize, 0,0, W,H);
 
-    // selection overlay
-    if (state.selection.active && state.selection.mask){
-      const w = state.tileSize;
-      ctx.save();
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = "#e9eef7";
-      for (let y=0;y<w;y++){
-        for (let x=0;x<w;x++){
-          if (state.selection.mask[y*w+x]){
-            ctx.fillRect(x*z, y*z, z, z);
-          }
-        }
-      }
-      ctx.restore();
-    }
-
-    // in-progress selection overlay (rect/lasso)
-    if (state.tool === "selRect" && state.selection.rectStart && state.selection.rectEnd){
-      const a=state.selection.rectStart, b=state.selection.rectEnd;
-      const xa=Math.min(a.x,b.x), xb=Math.max(a.x,b.x);
-      const ya=Math.min(a.y,b.y), yb=Math.max(a.y,b.y);
-      ctx.save();
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = "#7dd3fc";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(xa*z+1, ya*z+1, (xb-xa+1)*z-2, (yb-ya+1)*z-2);
-      ctx.restore();
-    }
-    if (state.tool === "selLasso" && state.selection.lassoPts && state.selection.lassoPts.length>1){
-      ctx.save();
-      ctx.strokeStyle = "#7dd3fc";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo((state.selection.lassoPts[0].x+0.5)*z, (state.selection.lassoPts[0].y+0.5)*z);
-      for (let i=1;i<state.selection.lassoPts.length;i++){
-        const p=state.selection.lassoPts[i];
-        ctx.lineTo((p.x+0.5)*z, (p.y+0.5)*z);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-
     // grid overlay
-    ctx.globalAlpha = 0.22;
+    ctx.globalAlpha = 0.25;
     ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 1;
     for (let x=0;x<=state.tileSize;x++){
@@ -1377,32 +1345,13 @@
     }
     ctx.globalAlpha = 1;
 
-    // brush preview overlay (hover)
-    if (state.hover.inside && state.hover.x>=0 && state.hover.y>=0){
-      const bsz = clamp(parseInt(el.brush.value,10) || 1, 1, 12);
-      const half = Math.floor(bsz/2);
-      const x0 = state.hover.x - half;
-      const y0 = state.hover.y - half;
-
-      let show = (state.tool === "brush" || state.tool === "eraser" || state.tool === "fill");
-      if (state.tool === "picker") show = true;
-      if (state.tool === "selRect" || state.tool === "selLasso") show = false;
-
-      if (show){
-        ctx.save();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = (state.tool === "eraser") ? "#fda4af" : "#e9eef7";
-        ctx.globalAlpha = 0.9;
-        if (state.tool === "fill" || state.tool === "picker"){
-          ctx.strokeRect(state.hover.x*z+1, state.hover.y*z+1, z-2, z-2);
-        } else {
-          ctx.strokeRect(x0*z+1, y0*z+1, bsz*z-2, bsz*z-2);
-        }
-        ctx.restore();
-      }
-    }
+    drawDashedSelection(ctx, z);
+    drawRectDrag(ctx, z);
+    drawLassoPath(ctx, z);
+    drawBrushPreview(ctx, z);
   }
 
+  // ---------- editor tools ----------
   function editorPosFromMouse(ev){
     const rect = el.editor.getBoundingClientRect();
     const scaleX = el.editor.width / rect.width;
@@ -1413,26 +1362,87 @@
     return { x: Math.floor(mx / z), y: Math.floor(my / z) };
   }
 
-  // ---------- brush / eraser / picker ----------
-  function applyBrushStroke(px,py, kind){
+  function floodFillActiveLayer(sx,sy){
+    const w=state.tileSize, h=state.tileSize;
+    const L = state.layers[state.activeLayer];
+    const img = cloneImageData(L.img);
+    const d = img.data;
+
+    const idx0 = (sy*w+sx)*4;
+    const sr = d[idx0], sg = d[idx0+1], sb = d[idx0+2], sa = d[idx0+3];
+
+    const col = state.palette[state.selectedSwatch] || [255,255,255];
+    const tr=col[0], tg=col[1], tb=col[2], ta=255;
+
+    if (sr===tr && sg===tg && sb===tb && sa===ta) return;
+
+    const stack = [[sx,sy]];
+    const seen = new Uint8Array(w*h);
+
+    while (stack.length){
+      const [x,y] = stack.pop();
+      if (x<0||y<0||x>=w||y>=h) continue;
+      const p = y*w+x;
+      if (seen[p]) continue;
+      seen[p]=1;
+
+      if (!isSelected(x,y)) continue;
+
+      const i = p*4;
+      if (d[i]!==sr || d[i+1]!==sg || d[i+2]!==sb || d[i+3]!==sa) continue;
+
+      d[i]=tr; d[i+1]=tg; d[i+2]=tb; d[i+3]=ta;
+
+      stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+    }
+
+    L.img = img;
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus("Fill done.");
+  }
+
+  function applyStroke(px,py){
     const w=state.tileSize, h=state.tileSize;
     if (px<0||py<0||px>=w||py>=h) return;
 
-    const bsz = clamp(parseInt(el.brush.value,10) || 1, 1, 12);
+    if (state.tool === "picker"){
+      const p = getFlattenedPixel(px,py);
+      state.picked = [p[0],p[1],p[2]];
+      el.pickedColor.value = rgbToHex(p[0],p[1],p[2]);
+      // snap swatch selection to nearest
+      let best=0, bestD=1e18;
+      for (let i=0;i<state.palette.length;i++){
+        const c = state.palette[i];
+        const dd = (p[0]-c[0])**2 + (p[1]-c[1])**2 + (p[2]-c[2])**2;
+        if (dd<bestD){ bestD=dd; best=i; }
+      }
+      state.selectedSwatch = best;
+      syncPaletteUI(); renderPaletteUI();
+      setStatus(`Picked rgb(${p[0]},${p[1]},${p[2]})`);
+      return;
+    }
+
+    if (state.tool === "fill"){
+      floodFillActiveLayer(px,py);
+      return;
+    }
+
+    const bsz = clamp(parseInt(el.brush.value,10) || 1, 1, 16);
     const half = Math.floor(bsz/2);
+    const col = state.palette[state.selectedSwatch] || [255,255,255];
 
     const L = state.layers[state.activeLayer];
     const img = cloneImageData(L.img);
     const d = img.data;
     const idxOf = (x,y)=> (y*w+x)*4;
-    const col = state.palette[state.selectedSwatch] || [255,255,255];
 
     for (let yy=py-half; yy<py-half+bsz; yy++){
       for (let xx=px-half; xx<px-half+bsz; xx++){
         if (xx<0||yy<0||xx>=w||yy>=h) continue;
-        if (!isSelectedPixel(xx,yy)) continue;
+        if (!isSelected(xx,yy)) continue;
         const i = idxOf(xx,yy);
-        if (kind === "eraser"){
+        if (state.tool === "eraser"){
           d[i]=0; d[i+1]=0; d[i+2]=0; d[i+3]=0;
         } else {
           d[i]=col[0]; d[i+1]=col[1]; d[i+2]=col[2]; d[i+3]=255;
@@ -1445,184 +1455,76 @@
     requestPreviewDraw();
   }
 
-  function doPicker(px,py){
-    const p = getFlattenedPixel(px,py);
-    state.picked = [p[0],p[1],p[2]];
-    el.pickedColor.value = rgbToHex(p[0],p[1],p[2]);
+  let editorDown=false;
+  el.editor.addEventListener("mousedown", (e)=>{
+    const p = editorPosFromMouse(e);
 
-    let best=0, bestD=1e18;
-    for (let i=0;i<state.palette.length;i++){
-      const c = state.palette[i];
-      const dd = (p[0]-c[0])**2 + (p[1]-c[1])**2 + (p[2]-c[2])**2;
-      if (dd<bestD){ bestD=dd; best=i; }
-    }
-    state.selectedSwatch = best;
-    syncPaletteUI();
-    renderPaletteUI();
-    setStatus(`Picked rgb(${p[0]},${p[1]},${p[2]})`);
-  }
-
-  // ---------- fill (bucket) ----------
-  function fillBucket(px,py){
-    const w=state.tileSize, h=state.tileSize;
-    if (px<0||py<0||px>=w||py>=h) return;
-    if (!isSelectedPixel(px,py)) return;
-
-    const L = state.layers[state.activeLayer];
-    const src = L.img.data;
-    const idx0 = (py*w+px)*4;
-
-    const tr = src[idx0], tg = src[idx0+1], tb = src[idx0+2], ta = src[idx0+3];
-    const col = state.palette[state.selectedSwatch] || [255,255,255];
-    const rr=col[0], rg=col[1], rb=col[2], ra=255;
-
-    // no-op if same
-    if (tr===rr && tg===rg && tb===rb && ta===ra) return;
-
-    const img = cloneImageData(L.img);
-    const d = img.data;
-
-    const match = (i)=> d[i]===tr && d[i+1]===tg && d[i+2]===tb && d[i+3]===ta;
-
-    const qx = new Int32Array(w*h);
-    const qy = new Int32Array(w*h);
-    let qs=0, qe=0;
-
-    const push = (x,y)=>{ qx[qe]=x; qy[qe]=y; qe++; };
-    push(px,py);
-
-    while (qs<qe){
-      const x=qx[qs], y=qy[qs]; qs++;
-      if (x<0||y<0||x>=w||y>=h) continue;
-      if (!isSelectedPixel(x,y)) continue;
-
-      const i=(y*w+x)*4;
-      if (!match(i)) continue;
-
-      d[i]=rr; d[i+1]=rg; d[i+2]=rb; d[i+3]=ra;
-
-      push(x+1,y); push(x-1,y); push(x,y+1); push(x,y-1);
-    }
-
-    L.img = img;
-    syncWorkToDisplay();
-    requestPreviewDraw();
-    setStatus("Fill applied.");
-  }
-
-  // ---------- selection interactions ----------
-  function startRectSelection(px,py, mode){
-    ensureSelectionMask();
-    state.selection.mode = mode;
-    state.selection.rectStart = {x:px,y:py};
-    state.selection.rectEnd = {x:px,y:py};
-  }
-  function updateRectSelection(px,py){
-    state.selection.rectEnd = {x:px,y:py};
-  }
-  function commitRectSelection(){
-    if (!state.selection.rectStart || !state.selection.rectEnd) return;
-    const a=state.selection.rectStart, b=state.selection.rectEnd;
-    const nm = rectMask(a.x,a.y,b.x,b.y);
-    applySelectionOperation(nm, state.selection.mode);
-    state.selection.rectStart = null;
-    state.selection.rectEnd = null;
-    syncWorkToDisplay();
-    setStatus("Rect selection set.");
-  }
-
-  function startLassoSelection(px,py, mode){
-    ensureSelectionMask();
-    state.selection.mode = mode;
-    state.selection.lassoPts = [{x:px,y:py}];
-  }
-  function updateLassoSelection(px,py){
-    const pts = state.selection.lassoPts;
-    if (!pts) return;
-    const last = pts[pts.length-1];
-    // avoid duplicates
-    if (last && last.x===px && last.y===py) return;
-    pts.push({x:px,y:py});
-  }
-  function commitLassoSelection(){
-    const pts = state.selection.lassoPts;
-    if (!pts || pts.length<3){
-      state.selection.lassoPts = null;
-      setStatus("Lasso needs a bigger stroke.");
-      syncWorkToDisplay();
+    if (state.tool === "rectSel"){
+      snapshotWorking();
+      state.rectDrag = { x0:p.x, y0:p.y, x1:p.x, y1:p.y, add: e.shiftKey };
+      requestEditorRedraw();
       return;
     }
-    const nm = lassoMask(pts);
-    applySelectionOperation(nm, state.selection.mode);
-    state.selection.lassoPts = null;
-    syncWorkToDisplay();
-    setStatus("Lasso selection set.");
-  }
-
-  // ---------- editor mouse ----------
-  let editorDown=false;
-
-  el.editor.addEventListener("mouseenter", ()=>{ state.hover.inside=true; drawEditor(); });
-  el.editor.addEventListener("mouseleave", ()=>{
-    state.hover.inside=false;
-    state.hover.x=-1; state.hover.y=-1;
-    drawEditor();
-  });
-
-  el.editor.addEventListener("mousemove", (e)=>{
-    const p=editorPosFromMouse(e);
-    state.hover.x = clamp(p.x, 0, state.tileSize-1);
-    state.hover.y = clamp(p.y, 0, state.tileSize-1);
-    state.hover.inside=true;
-
-    if (editorDown){
-      if (state.tool === "brush") applyBrushStroke(state.hover.x, state.hover.y, "brush");
-      else if (state.tool === "eraser") applyBrushStroke(state.hover.x, state.hover.y, "eraser");
-      else if (state.tool === "selRect") { updateRectSelection(state.hover.x, state.hover.y); syncWorkToDisplay(); }
-      else if (state.tool === "selLasso") { updateLassoSelection(state.hover.x, state.hover.y); syncWorkToDisplay(); }
-    } else {
-      drawEditor();
-    }
-  });
-
-  el.editor.addEventListener("mousedown", (e)=>{
-    const p=editorPosFromMouse(e);
-    const px = clamp(p.x,0,state.tileSize-1);
-    const py = clamp(p.y,0,state.tileSize-1);
-    state.hover.x=px; state.hover.y=py; state.hover.inside=true;
-
-    // selection mode modifiers:
-    const selMode = selectionModeFromEvent(e);
-
-    if (state.tool === "picker"){
-      doPicker(px,py);
-      drawEditor();
+    if (state.tool === "lasso"){
+      snapshotWorking();
+      state.lasso.dragging = true;
+      state.lasso.pts = [{x:p.x, y:p.y}];
+      requestEditorRedraw();
       return;
     }
 
     snapshotWorking();
     editorDown=true;
-
-    if (state.tool === "brush") applyBrushStroke(px,py,"brush");
-    else if (state.tool === "eraser") applyBrushStroke(px,py,"eraser");
-    else if (state.tool === "fill"){ fillBucket(px,py); editorDown=false; } // single click
-    else if (state.tool === "selRect"){ startRectSelection(px,py,selMode); syncWorkToDisplay(); }
-    else if (state.tool === "selLasso"){ startLassoSelection(px,py,selMode); syncWorkToDisplay(); }
+    applyStroke(p.x,p.y);
   });
 
   window.addEventListener("mouseup", ()=>{
-    if (!editorDown) return;
-    editorDown=false;
-
-    if (state.tool === "selRect"){
-      commitRectSelection();
-    } else if (state.tool === "selLasso"){
-      commitLassoSelection();
-    } else {
-      // brush/eraser done
+    if (state.rectDrag){
+      const {x0,y0,x1,y1, add} = state.rectDrag;
+      applyRectSelection(x0,y0,x1,y1, add);
+      state.selectionType = "rect";
+      el.selLabel.textContent = "rect";
+      state.rectDrag = null;
+      requestEditorRedraw();
+      setStatus("Rect selection set.");
+      return;
     }
-    drawEditor();
+    if (state.lasso.dragging){
+      const pts = state.lasso.pts.map(p=>({x: clamp(p.x,0,state.tileSize-1), y: clamp(p.y,0,state.tileSize-1)}));
+      rasterizePolygonToMask(pts, false);
+      state.selectionType = "lasso";
+      el.selLabel.textContent = "lasso";
+      state.lasso.dragging = false;
+      requestEditorRedraw();
+      setStatus("Lasso selection set.");
+      return;
+    }
+    editorDown=false;
   });
+
+  el.editor.addEventListener("mousemove", (e)=>{
+    const p = editorPosFromMouse(e);
+    state.hover.x = p.x;
+    state.hover.y = p.y;
+
+    if (state.rectDrag){
+      state.rectDrag.x1 = p.x;
+      state.rectDrag.y1 = p.y;
+      requestEditorRedraw();
+      return;
+    }
+    if (state.lasso.dragging){
+      const last = state.lasso.pts[state.lasso.pts.length-1];
+      if (!last || last.x!==p.x || last.y!==p.y) state.lasso.pts.push({x:p.x, y:p.y});
+      requestEditorRedraw();
+      return;
+    }
+    if (!editorDown){ requestEditorRedraw(); return; }
+    applyStroke(p.x,p.y);
+  });
+  el.editor.addEventListener("mouseleave", ()=>{ state.hover.x=-1; state.hover.y=-1; requestEditorRedraw(); });
+
+  el.btnClearSel.addEventListener("click", ()=>{ snapshotWorking(); clearSelection(); setStatus("Selection cleared."); });
 
   // ---------- upload + fit ----------
   function fitImageToLayer(img, layerIdx, mode){
@@ -1652,6 +1554,7 @@
       sx = Math.floor((iw - sw)/2);
       sy = Math.floor((ih - sh)/2);
     }
+    // stretch = default dx/dy/dw/dh already
     ctx.drawImage(img, sx,sy,sw,sh, dx,dy,dw,dh);
     ctx.imageSmoothingEnabled = false;
     state.layers[layerIdx].img = ctx.getImageData(0,0,tw,th);
@@ -1660,7 +1563,6 @@
   function applyUploadToLayers(img){
     snapshotWorking();
     ensureAtLeastOneLayer();
-    clearSelection();
 
     const target = el.uploadTarget.value;
     if (target === "replaceAll"){
@@ -1673,8 +1575,10 @@
     } else {
       fitImageToLayer(img, state.activeLayer, el.fitMode.value);
     }
+
     renameDefaultLayers();
     renderLayersUI();
+    clearSelection();
     syncWorkToDisplay();
     rebuildPaletteFromFlattened();
   }
@@ -1691,9 +1595,9 @@
         pushTilesetUndo();
         state.tiles[state.selectedSlot] = flattenVisibleToImageData();
         renderTilesetGrid();
-        setStatus(`Upload applied to layers and saved to slot ${state.selectedSlot+1}.`);
+        setStatus(`Upload applied and saved to slot ${state.selectedSlot+1}.`);
       } else {
-        setStatus("Upload applied to layers (not saved to tileset).");
+        setStatus("Upload applied to layers (not saved).");
       }
       requestPreviewDraw();
       URL.revokeObjectURL(url);
@@ -1704,32 +1608,13 @@
 
   el.btnFit.addEventListener("click", ()=>{
     if (!state.originalImage){ setStatus("Upload an image first."); return; }
-    snapshotWorking();
-    ensureAtLeastOneLayer();
-    clearSelection();
-
-    const target = el.uploadTarget.value;
-    if (target === "replaceAll"){
-      state.layers = [ newEmptyLayer("L1") ];
-      state.activeLayer = 0;
-      fitImageToLayer(state.originalImage, 0, el.fitMode.value);
-    } else if (target === "base"){
-      fitImageToLayer(state.originalImage, 0, el.fitMode.value);
-      state.activeLayer = 0;
-    } else {
-      fitImageToLayer(state.originalImage, state.activeLayer, el.fitMode.value);
-    }
-    renderLayersUI();
-    syncWorkToDisplay();
-    rebuildPaletteFromFlattened();
-    requestPreviewDraw();
+    applyUploadToLayers(state.originalImage);
     setStatus("Fit applied to target layer.");
   });
 
   el.btnResetWork.addEventListener("click", ()=>{
     snapshotWorking();
     ensureAtLeastOneLayer();
-    clearSelection();
     for (let li=0; li<state.layers.length; li++){
       state.layers[li].img = new ImageData(state.tileSize,state.tileSize);
       state.layers[li].visible = true;
@@ -1739,6 +1624,7 @@
     }
     state.activeLayer = 0;
     renderLayersUI();
+    clearSelection();
     syncWorkToDisplay();
     rebuildPaletteFromFlattened();
     requestPreviewDraw();
@@ -1762,7 +1648,6 @@
     syncPaletteUI();
     setStatus(`Swatch #${state.selectedSwatch+1} updated.`);
   });
-
   el.btnAddSwatch.addEventListener("click", ()=>{
     snapshotWorking();
     const rgb = hexToRgb(el.palColor.value);
@@ -1772,7 +1657,6 @@
     syncPaletteUI();
     setStatus("Swatch added.");
   });
-
   el.btnAddPicked.addEventListener("click", ()=>{
     snapshotWorking();
     state.palette.push([state.picked[0],state.picked[1],state.picked[2]]);
@@ -1781,7 +1665,6 @@
     syncPaletteUI();
     setStatus("Picked color added as swatch.");
   });
-
   el.btnDelSwatch.addEventListener("click", ()=>{
     if (state.palette.length<=2){ setStatus("Keep at least 2 swatches."); return; }
     snapshotWorking();
@@ -1791,52 +1674,43 @@
     syncPaletteUI();
     setStatus("Swatch deleted.");
   });
+  el.btnRebuildPalette.addEventListener("click", ()=>{ snapshotWorking(); rebuildPaletteFromFlattened(); });
 
-  el.btnRebuildPalette.addEventListener("click", ()=>{
-    snapshotWorking();
-    rebuildPaletteFromFlattened();
-    renderPaletteUI();
-    syncPaletteUI();
-  });
-
-  // ---------- recolor / quantize ----------
+  // ---------- replace / quantize (selection-aware) ----------
   function replaceColorsInImageData(img, fromRgb, toRgb, tol, includeAlpha){
-    const d = img.data;
-    for (let i=0;i<d.length;i+=4){
-      if (!includeAlpha && d[i+3] < 10) continue;
-      const p = [d[i],d[i+1],d[i+2]];
-      if (tol === 0){
-        if (p[0]===fromRgb[0] && p[1]===fromRgb[1] && p[2]===fromRgb[2]){
-          d[i]=toRgb[0]; d[i+1]=toRgb[1]; d[i+2]=toRgb[2];
-        }
-      } else {
-        if (dist3(p, fromRgb) <= tol){
-          d[i]=toRgb[0]; d[i+1]=toRgb[1]; d[i+2]=toRgb[2];
-        }
-      }
-    }
-  }
-
-  function quantizeImageDataToPalette(img, palette, ditherOn=true, dAmt=0.55){
     const w=img.width, h=img.height;
     const d = img.data;
     for (let y=0;y<h;y++){
       for (let x=0;x<w;x++){
+        if (!isSelected(x,y)) continue;
+        const i=(y*w+x)*4;
+        if (!includeAlpha && d[i+3] < 10) continue;
+        const p = [d[i],d[i+1],d[i+2]];
+        if (tol === 0){
+          if (p[0]===fromRgb[0] && p[1]===fromRgb[1] && p[2]===fromRgb[2]){
+            d[i]=toRgb[0]; d[i+1]=toRgb[1]; d[i+2]=toRgb[2];
+          }
+        } else {
+          if (dist3(p, fromRgb) <= tol){
+            d[i]=toRgb[0]; d[i+1]=toRgb[1]; d[i+2]=toRgb[2];
+          }
+        }
+      }
+    }
+  }
+  function quantizeImageDataToPalette(img, palette){
+    const w=img.width, h=img.height;
+    const d = img.data;
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        if (!isSelected(x,y)) continue;
         const i=(y*w+x)*4;
         if (d[i+3] < 10){ d[i+3]=0; continue; }
-        let r=d[i], g=d[i+1], b=d[i+2];
-        if (ditherOn){
-          const t = (BAYER4[y%4][x%4]/16 - 0.5) * (26 * dAmt);
-          r = clamp(r + t, 0, 255);
-          g = clamp(g + t, 0, 255);
-          b = clamp(b + t, 0, 255);
-        }
-        const c = nearestColor(r,g,b, palette);
+        const c = nearestColor(d[i],d[i+1],d[i+2], palette);
         d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
       }
     }
   }
-
   el.btnReplace.addEventListener("click", ()=>{
     const fromI = clamp(parseInt(el.repFrom.value,10)||1, 1, state.palette.length)-1;
     const toI   = clamp(parseInt(el.repTo.value,10)||1, 1, state.palette.length)-1;
@@ -1856,13 +1730,12 @@
     requestPreviewDraw();
     setStatus(`Replaced colors on ${el.effectScope.value} layers.`);
   });
-
   el.btnQuantize.addEventListener("click", ()=>{
     snapshotWorking();
     const idxs = getScopeLayerIndices(el.effectScope.value);
     for (const li of idxs){
       const img = cloneImageData(state.layers[li].img);
-      quantizeImageDataToPalette(img, state.palette, true, 0.55);
+      quantizeImageDataToPalette(img, state.palette);
       state.layers[li].img = img;
     }
     syncWorkToDisplay();
@@ -1870,327 +1743,248 @@
     setStatus(`Quantized to palette on ${el.effectScope.value} layers.`);
   });
 
-  // ---------- selection buttons ----------
-  el.btnSelRect.addEventListener("click", ()=>setTool("selRect"));
-  el.btnSelLasso.addEventListener("click", ()=>setTool("selLasso"));
-  el.btnSelClear.addEventListener("click", ()=>{ snapshotWorking(); clearSelection(); });
-  el.btnSelInvert.addEventListener("click", ()=>{ snapshotWorking(); invertSelection(); });
-
-  // ---------- tools buttons ----------
-  el.toolBrush.addEventListener("click", ()=>setTool("brush"));
-  el.toolEraser.addEventListener("click", ()=>setTool("eraser"));
-  el.toolPicker.addEventListener("click", ()=>setTool("picker"));
-  el.toolFill.addEventListener("click", ()=>setTool("fill"));
-  el.toolRect.addEventListener("click", ()=>setTool("selRect"));
-  el.toolLasso.addEventListener("click", ()=>setTool("selLasso"));
-
-  // ---------- seamless + simplify (scope aware) ----------
-  function offsetImageData(img, ox, oy){
+  // ---------- seamless (offset + band blend + optional sharpen) ----------
+  function bandWeight(t, blend){ // t in [0,1] centered at 0.5, bigger blend => wider band
+    // smoothstep around 0.5
+    const w = clamp(blend,0,1) * 0.5;
+    const a = 0.5 - w;
+    const b = 0.5 + w;
+    const x = (t-a)/(b-a+1e-9);
+    const s = clamp(x,0,1);
+    return s*s*(3-2*s);
+  }
+  function makeSeamlessOnImageData(img, margin, blend){
     const w=img.width, h=img.height;
-    const out = new ImageData(w,h);
+    const src = cloneImageData(img);
+    const out = cloneImageData(img);
+
+    const sd=src.data, od=out.data;
+
+    // 1) offset copy by half to bring seams to center
+    const ox = Math.floor(w/2);
+    const oy = Math.floor(h/2);
+
+    function idx(x,y){ return (y*w+x)*4; }
+    function wrap(v, m){ v%=m; if (v<0) v+=m; return v; }
+
+    // Build offset image into out first
     for (let y=0;y<h;y++){
       for (let x=0;x<w;x++){
-        const sx = (x - ox + w) % w;
-        const sy = (y - oy + h) % h;
-        const si = (sy*w+sx)*4;
-        const di = (y*w+x)*4;
-        out.data[di]=img.data[si];
-        out.data[di+1]=img.data[si+1];
-        out.data[di+2]=img.data[si+2];
-        out.data[di+3]=img.data[si+3];
+        const sx = wrap(x+ox,w);
+        const sy = wrap(y+oy,h);
+        const si = idx(sx,sy);
+        const di = idx(x,y);
+        od[di]=sd[si]; od[di+1]=sd[si+1]; od[di+2]=sd[si+2]; od[di+3]=sd[si+3];
       }
     }
-    return out;
-  }
 
-  function unsharpInPlace(img, amount){
-    const w=img.width, h=img.height;
-    const src = new Uint8ClampedArray(img.data);
-    const dst = img.data;
-    for (let y=0;y<h;y++){
-      for (let x=0;x<w;x++){
-        const i=(y*w+x)*4;
-        if (src[i+3] < 10) continue;
-        let br=0,bg=0,bb=0, cnt=0;
-        for (let yy=-1; yy<=1; yy++){
-          for (let xx=-1; xx<=1; xx++){
-            const nx = clamp(x+xx,0,w-1);
-            const ny = clamp(y+yy,0,h-1);
-            const j=(ny*w+nx)*4;
-            if (src[j+3] < 10) continue;
-            br += src[j]; bg += src[j+1]; bb += src[j+2]; cnt++;
-          }
-        }
-        if (!cnt) continue;
-        br/=cnt; bg/=cnt; bb/=cnt;
-        dst[i]   = clamp(Math.round(src[i]   + amount*(src[i]   - br)), 0, 255);
-        dst[i+1] = clamp(Math.round(src[i+1] + amount*(src[i+1] - bg)), 0, 255);
-        dst[i+2] = clamp(Math.round(src[i+2] + amount*(src[i+2] - bb)), 0, 255);
-        dst[i+3] = 255;
-      }
-    }
-  }
-
-  function makeSeamlessSmartControlled(img, margin, guideBlend, edgeKeep, curve, sharpen){
-    const w=img.width, h=img.height;
-    const srcC = createCanvas(w,h);
-    srcC.getContext("2d").putImageData(img,0,0);
-
-    const guideC = createCanvas(w,h);
-    const gctx = guideC.getContext("2d");
-    gctx.imageSmoothingEnabled = false;
-    gctx.clearRect(0,0,w,h);
-    gctx.drawImage(srcC,0,0);
-    gctx.save(); gctx.globalAlpha=0.5; gctx.translate(w,0); gctx.scale(-1,1); gctx.drawImage(srcC,0,0); gctx.restore();
-    gctx.save(); gctx.globalAlpha=0.5; gctx.translate(0,h); gctx.scale(1,-1); gctx.drawImage(guideC,0,0); gctx.restore();
-    const guide = gctx.getImageData(0,0,w,h);
-
-    const halfX = Math.floor(w/2), halfY = Math.floor(h/2);
-    const off = offsetImageData(img, halfX, halfY);
-    const out = new ImageData(w,h);
+    // 2) blend a band around center lines (vertical and horizontal)
+    const cx = Math.floor(w/2);
+    const cy = Math.floor(h/2);
 
     for (let y=0;y<h;y++){
       for (let x=0;x<w;x++){
-        const i=(y*w+x)*4;
-        const a = off.data[i+3];
-        if (a<10){ out.data[i+3]=0; continue; }
+        const di = idx(x,y);
+        const base = [od[di],od[di+1],od[di+2],od[di+3]];
 
-        const dx = Math.abs(x - halfX);
-        const dy = Math.abs(y - halfY);
-        const inBand = (dx <= margin) || (dy <= margin);
-
-        const rO=off.data[i], gO=off.data[i+1], bO=off.data[i+2];
-        if (!inBand){
-          out.data[i]=rO; out.data[i+1]=gO; out.data[i+2]=bO; out.data[i+3]=255;
-          continue;
+        // blend across vertical seam at cx
+        const dx = Math.abs(x - cx);
+        if (dx <= margin){
+          const t = dx / (margin+1e-9); // 0 at center
+          const wt = bandWeight(1 - t, blend);
+          // sample opposite side across seam
+          const x2 = wrap(x + (x<cx ? margin : -margin), w);
+          const si = idx(x2,y);
+          base[0] = Math.round(base[0]*(1-wt) + od[si]*wt);
+          base[1] = Math.round(base[1]*(1-wt) + od[si+1]*wt);
+          base[2] = Math.round(base[2]*(1-wt) + od[si+2]*wt);
+          base[3] = Math.round(base[3]*(1-wt) + od[si+3]*wt);
         }
 
-        const rG=guide.data[i], gG=guide.data[i+1], bG=guide.data[i+2];
-        const dmin = Math.min(dx,dy);
-        let t = 1 - (dmin / margin);
-        t = clamp(t, 0, 1);
-        t = Math.pow(t, curve);
+        // blend across horizontal seam at cy
+        const dy = Math.abs(y - cy);
+        if (dy <= margin){
+          const t = dy / (margin+1e-9);
+          const wt = bandWeight(1 - t, blend);
+          const y2 = wrap(y + (y<cy ? margin : -margin), h);
+          const si = idx(x,y2);
+          base[0] = Math.round(base[0]*(1-wt) + od[si]*wt);
+          base[1] = Math.round(base[1]*(1-wt) + od[si+1]*wt);
+          base[2] = Math.round(base[2]*(1-wt) + od[si+2]*wt);
+          base[3] = Math.round(base[3]*(1-wt) + od[si+3]*wt);
+        }
 
-        const dc = Math.sqrt((rO-rG)*(rO-rG)+(gO-gG)*(gO-gG)+(bO-bG)*(bO-bG));
-        const keep = clamp(1 - dc/100, 0, 1);
-        const guided = guideBlend * t * (1 - keep * edgeKeep);
-
-        out.data[i]   = Math.round(rO*(1-guided) + rG*guided);
-        out.data[i+1] = Math.round(gO*(1-guided) + gG*guided);
-        out.data[i+2] = Math.round(bO*(1-guided) + bG*guided);
-        out.data[i+3] = 255;
+        od[di]=base[0]; od[di+1]=base[1]; od[di+2]=base[2]; od[di+3]=base[3];
       }
     }
 
-    const back = offsetImageData(out, halfX, halfY);
-    if (sharpen > 0.001) unsharpInPlace(back, sharpen);
+    // 3) offset back (reverse)
+    const back = cloneImageData(out);
+    const bd=back.data;
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const sx = wrap(x-ox,w);
+        const sy = wrap(y-oy,h);
+        const si = idx(sx,sy);
+        const di = idx(x,y);
+        bd[di]=od[si]; bd[di+1]=od[si+1]; bd[di+2]=od[si+2]; bd[di+3]=od[si+3];
+      }
+    }
     return back;
   }
 
-  function applySeamPreset(){
-    const p = el.seamPreset.value;
-    if (p === "crisp"){
-      el.seamMargin.value = 5; el.seamGuide.value = 0.32; el.seamEdgeKeep.value = 0.82; el.seamCurve.value = 1.85; el.seamSharpen.value = 0.35;
-    } else if (p === "balanced"){
-      el.seamMargin.value = 6; el.seamGuide.value = 0.45; el.seamEdgeKeep.value = 0.70; el.seamCurve.value = 1.55; el.seamSharpen.value = 0.22;
-    } else if (p === "strong"){
-      el.seamMargin.value = 8; el.seamGuide.value = 0.62; el.seamEdgeKeep.value = 0.50; el.seamCurve.value = 1.25; el.seamSharpen.value = 0.10;
-    }
-  }
-  el.seamPreset.addEventListener("change", ()=>{ if (el.seamPreset.value !== "custom") applySeamPreset(); });
-
-  el.btnSeamless.addEventListener("click", ()=>{
-    snapshotWorking();
-    const margin = clamp(parseInt(el.seamMargin.value,10) || 6, 1, Math.floor(state.tileSize/2)-1);
-    const guideBlend = parseFloat(el.seamGuide.value);
-    const edgeKeep = parseFloat(el.seamEdgeKeep.value);
-    const curve = parseFloat(el.seamCurve.value);
-    const sharpen = parseFloat(el.seamSharpen.value);
-
-    const idxs = getScopeLayerIndices(el.effectScope.value);
-    for (const li of idxs){
-      state.layers[li].img = makeSeamlessSmartControlled(state.layers[li].img, margin, guideBlend, edgeKeep, curve, sharpen);
-    }
-    syncWorkToDisplay();
-    requestPreviewDraw();
-    setStatus(`Seamless applied to ${el.effectScope.value} layers.`);
-  });
-
-  function bilateralLiteEdgePreserve(img, smooth, edgePreserveOn){
-    const w=img.width, h=img.height;
-    const src = new Uint8ClampedArray(img.data);
-    const out = new ImageData(w,h);
-    const dst = out.data;
-
-    if (smooth <= 0.001){
-      dst.set(src);
-      return out;
-    }
-
-    const rad = 1;
-    const sigmaColor = 16 + smooth*45;
-    const sigmaSpatial = 1.1;
-    const gauss = (x,s)=> Math.exp(-(x*x)/(2*s*s));
-
-    function lumAt(ix){
-      return 0.2126*src[ix] + 0.7152*src[ix+1] + 0.0722*src[ix+2];
-    }
-
-    for (let y=0;y<h;y++){
-      for (let x=0;x<w;x++){
-        const i=(y*w+x)*4;
-        if (src[i+3]<10){ dst[i+3]=0; continue; }
-        const r0=src[i], g0=src[i+1], b0=src[i+2];
-
-        let edgeFactor = 1;
-        if (edgePreserveOn){
-          const iR = (y*w + clamp(x+1,0,w-1))*4;
-          const iD = (clamp(y+1,0,h-1)*w + x)*4;
-          const dl = Math.abs(lumAt(i) - lumAt(iR)) + Math.abs(lumAt(i) - lumAt(iD));
-          edgeFactor = clamp(1 - dl/70, 0.15, 1);
+  function sharpenImageData(img, amount){
+    amount = clamp(amount,0,1);
+    if (amount<=0) return img;
+    const w=img.width,h=img.height;
+    const src=cloneImageData(img), out=cloneImageData(img);
+    const sd=src.data, od=out.data;
+    function idx(x,y){ return (y*w+x)*4; }
+    for (let y=1;y<h-1;y++){
+      for (let x=1;x<w-1;x++){
+        const i=idx(x,y);
+        for (let c=0;c<3;c++){
+          const center=sd[i+c];
+          const up=sd[idx(x,y-1)+c], dn=sd[idx(x,y+1)+c], lf=sd[idx(x-1,y)+c], rt=sd[idx(x+1,y)+c];
+          const lap = (up+dn+lf+rt) - 4*center;
+          let v = center - lap*0.25*amount;
+          od[i+c]=clamp(Math.round(v),0,255);
         }
-
-        let wr=0,wg=0,wb=0,wsum=0;
-        for (let yy=-rad; yy<=rad; yy++){
-          for (let xx=-rad; xx<=rad; xx++){
-            const nx = clamp(x+xx, 0, w-1);
-            const ny = clamp(y+yy, 0, h-1);
-            const j=(ny*w+nx)*4;
-            if (src[j+3]<10) continue;
-            const r=src[j], g=src[j+1], b=src[j+2];
-
-            const ds = Math.sqrt(xx*xx+yy*yy);
-            const dc = Math.sqrt((r-r0)*(r-r0) + (g-g0)*(g-g0) + (b-b0)*(b-b0));
-            const wgt = gauss(ds, sigmaSpatial) * gauss(dc, sigmaColor / edgeFactor);
-
-            wr += r*wgt; wg += g*wgt; wb += b*wgt; wsum += wgt;
-          }
-        }
-
-        dst[i]=Math.round(wsum?wr/wsum:r0);
-        dst[i+1]=Math.round(wsum?wg/wsum:g0);
-        dst[i+2]=Math.round(wsum?wb/wsum:b0);
-        dst[i+3]=255;
+        od[i+3]=sd[i+3];
       }
     }
     return out;
   }
 
-  function kmeansColors(img, k, iters=8){
-    const d = img.data;
-    const pts=[];
-    for (let i=0;i<d.length;i+=4){
-      if (d[i+3] < 10) continue;
-      pts.push([d[i],d[i+1],d[i+2]]);
-    }
-    if (!pts.length) return { centers: [[255,255,255],[0,0,0]] };
+  function applySeamless(scope){
+    const preset = el.seamPreset.value;
+    let margin = clamp(parseInt(el.seamMargin.value,10)||5,1,16);
+    let blend = parseFloat(el.seamBlend.value);
+    let sharp = parseFloat(el.seamSharpen.value);
 
-    const centers=[];
-    centers.push(pts[Math.floor(Math.random()*pts.length)]);
-    while (centers.length < k){
-      let bestP = pts[0], bestD=-1;
-      for (let s=0;s<64;s++){
-        const p = pts[Math.floor(Math.random()*pts.length)];
-        let minD=1e18;
-        for (const c of centers){
-          const dr=p[0]-c[0], dg=p[1]-c[1], db=p[2]-c[2];
-          const dd=dr*dr+dg*dg+db*db;
-          if (dd<minD) minD=dd;
-        }
-        if (minD>bestD){ bestD=minD; bestP=p; }
-      }
-      centers.push(bestP);
-    }
+    if (preset==="crisp"){ blend=0.22; sharp=0.35; }
+    if (preset==="balanced"){ blend=0.35; sharp=0.25; }
+    if (preset==="strong"){ blend=0.55; sharp=0.10; }
 
-    for (let it=0; it<iters; it++){
-      const sum = new Array(k).fill(0).map(()=>[0,0,0,0]);
-      for (const p of pts){
-        let bi=0, bd=1e18;
-        for (let i=0;i<k;i++){
-          const c=centers[i];
-          const dr=p[0]-c[0], dg=p[1]-c[1], db=p[2]-c[2];
-          const dd=dr*dr+dg*dg+db*db;
-          if (dd<bd){ bd=dd; bi=i; }
-        }
-        sum[bi][0]+=p[0]; sum[bi][1]+=p[1]; sum[bi][2]+=p[2]; sum[bi][3]+=1;
-      }
-      for (let i=0;i<k;i++){
-        if (!sum[i][3]) continue;
-        centers[i] = [
-          Math.round(sum[i][0]/sum[i][3]),
-          Math.round(sum[i][1]/sum[i][3]),
-          Math.round(sum[i][2]/sum[i][3]),
-        ];
-      }
-    }
-    return { centers };
-  }
-  function nearestCenter(r,g,b, centers){
-    let best=centers[0], bestD=1e18;
-    for (const c of centers){
-      const dr=r-c[0], dg=g-c[1], db=b-c[2];
-      const dd=dr*dr+dg*dg+db*db;
-      if (dd<bestD){ bestD=dd; best=c; }
-    }
-    return best;
-  }
-
-  function applySimplifyPreset(){
-    const p = el.simpPreset.value;
-    if (p === "clean"){
-      el.simpColors.value = 10; el.simpSmooth.value = 0.06; el.simpEdge.value = "on"; el.simpDither.value = "off"; el.simpDitherAmt.value = 0.25;
-    } else if (p === "photo"){
-      el.simpColors.value = 12; el.simpSmooth.value = 0.32; el.simpEdge.value = "on"; el.simpDither.value = "on"; el.simpDitherAmt.value = 0.65;
-    } else if (p === "soft"){
-      el.simpColors.value = 14; el.simpSmooth.value = 0.45; el.simpEdge.value = "off"; el.simpDither.value = "on"; el.simpDitherAmt.value = 0.45;
-    } else if (p === "hi"){
-      el.simpColors.value = 8; el.simpSmooth.value = 0.10; el.simpEdge.value = "on"; el.simpDither.value = "on"; el.simpDitherAmt.value = 0.45;
-    }
-  }
-  el.simpPreset.addEventListener("change", ()=>{ if (el.simpPreset.value !== "custom") applySimplifyPreset(); });
-
-  el.btnSimplify.addEventListener("click", ()=>{
     snapshotWorking();
-
-    const k = clamp(parseInt(el.simpColors.value,10) || 12, 2, 32);
-    const smooth = parseFloat(el.simpSmooth.value);
-    const edgeOn = el.simpEdge.value === "on";
-    const doDither = el.simpDither.value === "on";
-    const dAmt = parseFloat(el.simpDitherAmt.value);
-
-    const idxs = getScopeLayerIndices(el.effectScope.value);
+    const idxs = getScopeLayerIndices(scope);
     for (const li of idxs){
       let img = cloneImageData(state.layers[li].img);
-      img = bilateralLiteEdgePreserve(img, smooth, edgeOn);
-      const { centers } = kmeansColors(img, k, 8);
-      const d = img.data;
-      const w=img.width, h=img.height;
-
-      for (let y=0;y<h;y++){
-        for (let x=0;x<w;x++){
-          const i=(y*w+x)*4;
-          if (d[i+3] < 10){ d[i+3]=0; continue; }
-          let r=d[i], g=d[i+1], b=d[i+2];
-          if (doDither){
-            const t = (BAYER4[y%4][x%4]/16 - 0.5) * (26 * dAmt);
-            r = clamp(r + t, 0, 255);
-            g = clamp(g + t, 0, 255);
-            b = clamp(b + t, 0, 255);
-          }
-          const c = nearestCenter(r,g,b, centers);
-          d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
-        }
-      }
+      img = makeSeamlessOnImageData(img, margin, blend);
+      img = sharpenImageData(img, sharp);
       state.layers[li].img = img;
     }
-
     syncWorkToDisplay();
-    rebuildPaletteFromFlattened();
     requestPreviewDraw();
-    setStatus(`Simplify applied to ${el.effectScope.value} layers.`);
-  });
+    setStatus(`Seamless applied to ${scope} layers.`);
+  }
+  el.btnSeamless.addEventListener("click", ()=>applySeamless(el.effectScope.value));
 
-  // ---------- preview (unchanged core) ----------
+  // ---------- simplify (optional preblur + quantize + optional dither) ----------
+  function boxBlur(img, amount){
+    amount = clamp(amount,0,1);
+    if (amount<=0) return img;
+    const w=img.width,h=img.height;
+    const src=cloneImageData(img), out=cloneImageData(img);
+    const sd=src.data, od=out.data;
+    const r = Math.max(1, Math.round(amount*2)); // 1..2
+    function idx(x,y){ return (y*w+x)*4; }
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        let sr=0,sg=0,sb=0,sa=0, n=0;
+        for (let yy=y-r; yy<=y+r; yy++){
+          for (let xx=x-r; xx<=x+r; xx++){
+            if (xx<0||yy<0||xx>=w||yy>=h) continue;
+            const i=idx(xx,yy);
+            const a=sd[i+3];
+            sr+=sd[i]; sg+=sd[i+1]; sb+=sd[i+2]; sa+=a;
+            n++;
+          }
+        }
+        const i=idx(x,y);
+        od[i]=Math.round(sr/n);
+        od[i+1]=Math.round(sg/n);
+        od[i+2]=Math.round(sb/n);
+        od[i+3]=Math.round(sa/n);
+      }
+    }
+    return out;
+  }
+
+  function simplifyImageData(img, maxColors, preSmooth, doDither, dAmt, edgePreserve){
+    // build palette from (optionally blurred) version
+    let base = img;
+    if (preSmooth>0) base = boxBlur(img, preSmooth);
+
+    let pal = buildPaletteFromImageData(base, maxColors);
+    // ensure at least 2
+    if (pal.length<2) pal = [[255,255,255],[0,0,0]];
+
+    const w=img.width,h=img.height;
+    const out=cloneImageData(img);
+    const d=out.data;
+
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        if (!isSelected(x,y)) continue;
+        const i=(y*w+x)*4;
+        if (d[i+3]<10){ d[i+3]=0; continue; }
+
+        let r=d[i], g=d[i+1], b=d[i+2];
+
+        // edge preserve: nudge away from averaging by sampling original vs blurred palette anchor
+        if (edgePreserve){
+          // cheap edge measure
+          const iL = (y*w+Math.max(0,x-1))*4;
+          const iR = (y*w+Math.min(w-1,x+1))*4;
+          const iU = (Math.max(0,y-1)*w+x)*4;
+          const iD = (Math.min(h-1,y+1)*w+x)*4;
+          const edge = Math.abs(d[i]-d[iL]) + Math.abs(d[i]-d[iR]) + Math.abs(d[i]-d[iU]) + Math.abs(d[i]-d[iD]);
+          // if strong edge, reduce dithering jitter later
+          if (edge>120) dAmt *= 0.35;
+        }
+
+        if (doDither){
+          const t = (BAYER4[y&3][x&3]/16 - 0.5) * (dAmt*24);
+          r = clamp(Math.round(r + t),0,255);
+          g = clamp(Math.round(g + t),0,255);
+          b = clamp(Math.round(b + t),0,255);
+        }
+
+        const c = nearestColor(r,g,b,pal);
+        d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
+      }
+    }
+    return out;
+  }
+
+  function applySimplify(scope){
+    const preset = el.simpPreset.value;
+    let maxColors = clamp(parseInt(el.simpColors.value,10)||12,2,32);
+    let pre = parseFloat(el.simpSmooth.value);
+    let doD = el.simpDither.value === "on";
+    let dAmt = parseFloat(el.simpDitherAmt.value);
+    let edge = el.simpEdge.value === "on";
+
+    if (preset==="clean"){ pre=0.03; doD=true; dAmt=0.45; maxColors=maxColors; edge=true; }
+    if (preset==="photo"){ pre=0.20; doD=true; dAmt=0.65; maxColors=Math.max(maxColors,14); edge=false; }
+    if (preset==="soft"){ pre=0.22; doD=false; dAmt=0; maxColors=Math.max(8,Math.min(maxColors,14)); edge=false; }
+    if (preset==="hi"){ pre=0.04; doD=true; dAmt=0.55; maxColors=Math.max(8,Math.min(maxColors,16)); edge=true; }
+
+    snapshotWorking();
+    const idxs = getScopeLayerIndices(scope);
+    for (const li of idxs){
+      const src = cloneImageData(state.layers[li].img);
+      const out = simplifyImageData(src, maxColors, pre, doD, dAmt, edge);
+      state.layers[li].img = out;
+    }
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus(`Simplify applied to ${scope} layers.`);
+  }
+  el.btnSimplify.addEventListener("click", ()=>applySimplify(el.effectScope.value));
+
+  // ---------- preview ----------
   let previewDirty = true;
   function requestPreviewDraw(){ previewDirty = true; }
   function resizePreviewCanvasToFrame(){
@@ -2204,97 +1998,15 @@
     el.bigPreview.height = Math.floor(side * dpr);
     previewDirty = true;
   }
-  function drawCheckerWorld(ctx, x0,y0,w,h, cell=16){
-    const xStart = Math.floor(x0/cell)*cell;
-    const yStart = Math.floor(y0/cell)*cell;
-    for (let y=yStart; y<y0+h; y+=cell){
-      for (let x=xStart; x<x0+w; x+=cell){
-        const v = ((Math.floor(x/cell)+Math.floor(y/cell))%2) ? 24 : 16;
-        ctx.fillStyle = `rgb(${v},${v},${v})`;
-        ctx.fillRect(x,y,cell,cell);
-      }
-    }
-  }
-  function hash2(x,y,seed){
-    let h = (x*374761393 + y*668265263) ^ (seed*1274126177);
-    h = (h ^ (h >> 13)) >>> 0;
-    h = (h * 1274126177) >>> 0;
-    return (h % 1000000) / 1000000;
-  }
-  function getPreviewTileList(){
-    const ids = [...state.selectedForPreview].filter(i => i>=0 && i<state.capacity);
-    const list = [];
-    for (const i of ids){
-      if (state.tiles[i]) list.push(state.tiles[i]);
-    }
-    if (list.length) return list;
-    return [flattenVisibleToImageData()];
-  }
-  function buildAutoField(cols, rows, seed, fill, scale, smooth){
-    const field = new Uint8Array(cols*rows);
-    const s = Math.max(1, parseInt(scale,10) || 3);
-    for (let y=0;y<rows;y++){
-      for (let x=0;x<cols;x++){
-        const nx = Math.floor(x / s);
-        const ny = Math.floor(y / s);
-        const n = hash2(nx, ny, seed);
-        field[y*cols+x] = (n < fill) ? 1 : 0;
-      }
-    }
-    const iters = Math.floor(clamp(smooth,0,1) * 10 + 1e-6);
-    for (let it=0; it<iters; it++){
-      const copy = new Uint8Array(field);
-      for (let y=0;y<rows;y++){
-        for (let x=0;x<cols;x++){
-          let cnt=0;
-          for (let yy=-1; yy<=1; yy++){
-            for (let xx=-1; xx<=1; xx++){
-              const nx = clamp(x+xx, 0, cols-1);
-              const ny = clamp(y+yy, 0, rows-1);
-              cnt += copy[ny*cols+nx];
-            }
-          }
-          field[y*cols+x] = (cnt >= 5) ? 1 : 0;
-        }
-      }
-    }
-    return field;
-  }
-  function ensureAutoField(){
-    const cols = clamp(parseInt(el.gridCols.value,10) || 14, 2, 128);
-    const rows = clamp(parseInt(el.gridRows.value,10) || 14, 2, 128);
-    const seed = parseInt(el.seed.value,10) || 1;
-    const fill = parseFloat(el.autoFill.value);
-    const scale = parseInt(el.autoScale.value,10) || 3;
-    const smooth = parseFloat(el.autoSmooth.value);
 
-    const needs =
-      !state.autoField ||
-      state.autoFieldCols !== cols ||
-      state.autoFieldRows !== rows ||
-      state.autoFieldSeed !== seed ||
-      state._autoFill !== fill ||
-      state._autoScale !== scale ||
-      state._autoSmooth !== smooth;
-
-    if (needs){
-      state.autoFieldCols = cols;
-      state.autoFieldRows = rows;
-      state.autoFieldSeed = seed;
-      state._autoFill = fill;
-      state._autoScale = scale;
-      state._autoSmooth = smooth;
-      state.autoField = buildAutoField(cols, rows, seed, fill, scale, smooth);
-    }
-  }
-  function mask4(field, cols, rows, x,y){
-    const c = field[y*cols+x];
-    if (!c) return -1;
-    const n = (y>0)       ? field[(y-1)*cols+x] : 0;
-    const e = (x<cols-1)  ? field[y*cols+(x+1)] : 0;
-    const s = (y<rows-1)  ? field[(y+1)*cols+x] : 0;
-    const w = (x>0)       ? field[y*cols+(x-1)] : 0;
-    return (n?1:0) | (e?2:0) | (s?4:0) | (w?8:0);
+  function mulberry32(seed){
+    let t = seed >>> 0;
+    return function(){
+      t += 0x6D2B79F5;
+      let r = Math.imul(t ^ t>>>15, 1|t);
+      r ^= r + Math.imul(r ^ r>>>7, 61|r);
+      return ((r ^ r>>>14) >>> 0) / 4294967296;
+    };
   }
 
   function drawPreview(){
@@ -2304,215 +2016,151 @@
     const c = el.bigPreview;
     const ctx = c.getContext("2d");
     ctx.imageSmoothingEnabled = false;
-    const dpr = window.devicePixelRatio || 1;
 
+    const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,c.width,c.height);
     ctx.setTransform(dpr,0,0,dpr,0,0);
-
     const side = c.width / dpr;
+
     const ts = state.tileSize;
     const cols = clamp(parseInt(el.gridCols.value,10) || 14, 2, 128);
     const rows = clamp(parseInt(el.gridRows.value,10) || 14, 2, 128);
+    const gridAlpha = parseFloat(el.gridLine.value);
+
+    const chosen = [...state.selectedForPreview].filter(i=>i>=0&&i<state.capacity && state.tiles[i]);
+    const tiles = chosen.length ? chosen.map(i=>state.tiles[i]) : [flattenVisibleToImageData()];
+
     const mode = el.previewMode.value;
-    const seed = parseInt(el.seed.value,10) || 1;
-    const lineA = parseFloat(el.gridLine.value);
+    const rng = mulberry32((parseInt(el.seed.value,10)||1)>>>0);
 
-    const worldW = cols * ts;
-    const worldH = rows * ts;
+    const tmp = createCanvas(ts, ts);
+    const tctx = tmp.getContext("2d"); tctx.imageSmoothingEnabled=false;
 
-    const zoom = state.cam.zoom;
-    const viewWWorld = side / zoom;
-    const viewHWorld = side / zoom;
-
-    state.cam.panX = clamp(state.cam.panX, -ts, Math.max(-ts, worldW - viewWWorld + ts));
-    state.cam.panY = clamp(state.cam.panY, -ts, Math.max(-ts, worldH - viewHWorld + ts));
+    function drawTile(img,x,y){
+      tctx.clearRect(0,0,ts,ts);
+      tctx.putImageData(img,0,0);
+      ctx.drawImage(tmp,x,y);
+    }
 
     ctx.save();
     ctx.beginPath(); ctx.rect(0,0,side,side); ctx.clip();
-    ctx.scale(zoom, zoom);
+    ctx.scale(state.cam.zoom, state.cam.zoom);
     ctx.translate(-state.cam.panX, -state.cam.panY);
-
-    drawCheckerWorld(ctx, state.cam.panX, state.cam.panY, viewWWorld, viewHWorld, 16);
-
-    const tiles = getPreviewTileList();
-    const tmp = createCanvas(ts, ts);
-    const tctx = tmp.getContext("2d");
-    tctx.imageSmoothingEnabled = false;
-
-    function drawTile(img, x,y){
-      tctx.clearRect(0,0,ts,ts);
-      tctx.putImageData(img,0,0);
-      ctx.drawImage(tmp, x,y);
-    }
-
-    if (mode === "tileset"){
-      const atlasCols = state.cols;
-      for (let i=0;i<state.capacity;i++){
-        if (!state.tiles[i]) continue;
-        const x = (i % atlasCols) * ts;
-        const y = Math.floor(i / atlasCols) * ts;
-        drawTile(state.tiles[i], x,y);
-      }
-      ctx.restore();
-      el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)} • atlas`;
-      return;
-    }
-
-    if (mode === "autotile16"){
-      ensureAutoField();
-      const field = state.autoField;
-
-      if (tiles.length < 16){
-        for (let gy=0; gy<rows; gy++){
-          for (let gx=0; gx<cols; gx++){
-            const filled = field[gy*cols + gx] === 1;
-            if (!filled) continue;
-            drawTile(tiles[(gy*cols + gx) % tiles.length], gx*ts, gy*ts);
-          }
-        }
-      } else {
-        for (let gy=0; gy<rows; gy++){
-          for (let gx=0; gx<cols; gx++){
-            const m = mask4(field, cols, rows, gx, gy);
-            if (m < 0) continue;
-            drawTile(tiles[m], gx*ts, gy*ts);
-          }
-        }
-      }
-
-      if (lineA > 0){
-        ctx.save();
-        ctx.globalAlpha = lineA;
-        ctx.strokeStyle = "#cbd5e1";
-        ctx.lineWidth = 1/zoom;
-        for (let x=1;x<cols;x++){
-          const px = x*ts + 0.5/zoom;
-          ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, worldH); ctx.stroke();
-        }
-        for (let y=1;y<rows;y++){
-          const py = y*ts + 0.5/zoom;
-          ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(worldW, py); ctx.stroke();
-        }
-        ctx.restore();
-      }
-
-      ctx.restore();
-      el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)} • autotile`;
-      el.autoHint.style.display = "block";
-      return;
-    } else {
-      el.autoHint.style.display = "none";
-    }
 
     for (let gy=0; gy<rows; gy++){
       for (let gx=0; gx<cols; gx++){
         let img = tiles[0];
-        if (mode === "grid"){
-          img = tiles[(gy*cols + gx) % tiles.length];
-        } else if (mode === "random"){
-          img = tiles[Math.floor(hash2(gx,gy,seed) * tiles.length)];
-        } else if (mode === "checker"){
+        const idx = gy*cols+gx;
+
+        if (mode==="grid") img = tiles[idx % tiles.length];
+        else if (mode==="random") img = tiles[Math.floor(rng()*tiles.length)];
+        else if (mode==="checker"){
           const a = tiles[0];
-          const b = tiles[Math.min(1, tiles.length-1)] || a;
-          img = ((gx+gy)%2===0) ? a : b;
-        } else if (mode === "stripesRow"){
+          const b = tiles.length>1 ? tiles[1] : tiles[0];
+          img = ((gx+gy)&1) ? b : a;
+        } else if (mode==="stripesRow"){
           img = tiles[gy % tiles.length];
-        } else if (mode === "stripesCol"){
+        } else if (mode==="stripesCol"){
           img = tiles[gx % tiles.length];
-        } else if (mode === "noise"){
-          const n = hash2(Math.floor(gx/2), Math.floor(gy/2), seed);
-          img = tiles[Math.floor(n * tiles.length)];
         }
+
         drawTile(img, gx*ts, gy*ts);
       }
     }
 
-    if (lineA > 0){
-      ctx.save();
-      ctx.globalAlpha = lineA;
+    // grid lines
+    if (gridAlpha>0){
+      ctx.globalAlpha = gridAlpha;
       ctx.strokeStyle = "#cbd5e1";
-      ctx.lineWidth = 1/zoom;
-      for (let x=1;x<cols;x++){
-        const px = x*ts + 0.5/zoom;
-        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, worldH); ctx.stroke();
+      ctx.lineWidth = 1;
+      const W = cols*ts, H = rows*ts;
+      for (let x=0;x<=cols;x++){
+        ctx.beginPath(); ctx.moveTo(x*ts+0.5, 0); ctx.lineTo(x*ts+0.5, H); ctx.stroke();
       }
-      for (let y=1;y<rows;y++){
-        const py = y*ts + 0.5/zoom;
-        ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(worldW, py); ctx.stroke();
+      for (let y=0;y<=rows;y++){
+        ctx.beginPath(); ctx.moveTo(0, y*ts+0.5); ctx.lineTo(W, y*ts+0.5, ); ctx.stroke();
       }
-      ctx.restore();
+      ctx.globalAlpha = 1;
     }
 
     ctx.restore();
     el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)}`;
   }
 
-  // preview pan/zoom
-  let panning=false;
-  let panStart = {x:0,y:0, panX:0, panY:0};
-
-  el.bigPreview.addEventListener("mousedown", (e)=>{
+  // pan/zoom
+  let panning=false; let panStart={x:0,y:0,panX:0,panY:0};
+  el.bigPreview.addEventListener("mousedown",(e)=>{
     panning=true;
-    const rect = el.bigPreview.getBoundingClientRect();
-    panStart.x = e.clientX - rect.left;
-    panStart.y = e.clientY - rect.top;
-    panStart.panX = state.cam.panX;
-    panStart.panY = state.cam.panY;
+    const rect=el.bigPreview.getBoundingClientRect();
+    panStart.x=e.clientX-rect.left; panStart.y=e.clientY-rect.top;
+    panStart.panX=state.cam.panX; panStart.panY=state.cam.panY;
   });
-  window.addEventListener("mouseup", ()=>{ panning=false; });
-  window.addEventListener("mousemove", (e)=>{
-    if (!panning) return;
-    const rect = el.bigPreview.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const dx = mx - panStart.x;
-    const dy = my - panStart.y;
-    state.cam.panX = panStart.panX - dx / state.cam.zoom;
-    state.cam.panY = panStart.panY - dy / state.cam.zoom;
+  window.addEventListener("mouseup",()=>{panning=false;});
+  window.addEventListener("mousemove",(e)=>{
+    if(!panning) return;
+    const rect=el.bigPreview.getBoundingClientRect();
+    const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+    const dx=mx-panStart.x, dy=my-panStart.y;
+    state.cam.panX=panStart.panX - dx/state.cam.zoom;
+    state.cam.panY=panStart.panY - dy/state.cam.zoom;
     requestPreviewDraw();
   });
-  el.bigPreview.addEventListener("wheel", (e)=>{
+  el.bigPreview.addEventListener("wheel",(e)=>{
     e.preventDefault();
-    const rect = el.bigPreview.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-
-    const worldX = state.cam.panX + mx / state.cam.zoom;
-    const worldY = state.cam.panY + my / state.cam.zoom;
-
-    const delta = Math.sign(e.deltaY);
-    const factor = (delta > 0) ? 0.9 : 1.111111;
-    state.cam.zoom = clamp(state.cam.zoom * factor, 0.25, 20);
-
-    state.cam.panX = worldX - mx / state.cam.zoom;
-    state.cam.panY = worldY - my / state.cam.zoom;
+    const rect=el.bigPreview.getBoundingClientRect();
+    const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+    const worldX=state.cam.panX + mx/state.cam.zoom;
+    const worldY=state.cam.panY + my/state.cam.zoom;
+    const delta=Math.sign(e.deltaY);
+    const factor=(delta>0)?0.9:1.111111;
+    state.cam.zoom=clamp(state.cam.zoom*factor,0.25,20);
+    state.cam.panX=worldX - mx/state.cam.zoom;
+    state.cam.panY=worldY - my/state.cam.zoom;
     requestPreviewDraw();
-  }, { passive:false });
+  },{passive:false});
+  el.btnResetView.addEventListener("click",()=>{ state.cam.zoom=1; state.cam.panX=0; state.cam.panY=0; requestPreviewDraw(); });
 
-  el.btnResetView.addEventListener("click", ()=>{
-    state.cam.zoom = 1; state.cam.panX = 0; state.cam.panY = 0;
+  // ---------- wiring ----------
+  el.tileSize.addEventListener("change", ensureTileSize);
+  el.capacity.addEventListener("change", ()=>{ pushTilesetUndo(); rebuildTilesetStorage(); renderTilesetGrid(); requestPreviewDraw(); });
+  el.cols.addEventListener("change", ()=>{ state.cols = clamp(parseInt(el.cols.value,10)||12,4,64); renderTilesetGrid(); requestPreviewDraw(); });
+  el.slot.addEventListener("change", ()=>{
+    const v=clamp(parseInt(el.slot.value,10)||1,1,state.capacity);
+    state.selectedSlot=v-1;
+    el.slotLabel.textContent=String(v);
+    renderTilesetGrid();
     requestPreviewDraw();
   });
 
-  function invalidateAuto(){ state.autoField = null; requestPreviewDraw(); }
-  el.btnNewAutoMap.addEventListener("click", ()=>{
-    el.seed.value = String((parseInt(el.seed.value,10)||1) + 1);
-    invalidateAuto();
+  el.btnUndoTileset.addEventListener("click", undoTileset);
+  el.btnUndoWork.addEventListener("click", undoWorking);
+  el.editZoom.addEventListener("input", updateEditorCanvas);
+  el.brush.addEventListener("input", requestEditorRedraw);
+
+  el.toolBrush.addEventListener("click", ()=>setTool("brush"));
+  el.toolEraser.addEventListener("click", ()=>setTool("eraser"));
+  el.toolPicker.addEventListener("click", ()=>setTool("picker"));
+  el.toolFill.addEventListener("click", ()=>setTool("fill"));
+  el.toolRectSel.addEventListener("click", ()=>setTool("rectSel"));
+  el.toolLasso.addEventListener("click", ()=>setTool("lasso"));
+
+  el.btnDupTile.addEventListener("click", duplicateSelectedTileToFirstEmpty);
+
+  window.addEventListener("keydown",(e)=>{
+    const k=e.key.toLowerCase();
+    if ((e.ctrlKey||e.metaKey) && k==="z" && !e.shiftKey){ e.preventDefault(); undoWorking(); }
+    if ((e.ctrlKey||e.metaKey) && k==="z" && e.shiftKey){ e.preventDefault(); undoTileset(); }
+    if (k==="b") setTool("brush");
+    if (k==="e") setTool("eraser");
+    if (k==="i") setTool("picker");
+    if (k==="g") setTool("fill");
+    if (k==="r") setTool("rectSel");
+    if (k==="l") setTool("lasso");
+    if (k==="escape"){ snapshotWorking(); clearSelection(); setStatus("Selection cleared."); }
   });
 
-  // preview controls -> redraw
-  el.previewSize.addEventListener("change", ()=>{ resizePreviewCanvasToFrame(); requestPreviewDraw(); });
-  el.previewMode.addEventListener("change", ()=>{ if (el.previewMode.value==="autotile16") invalidateAuto(); requestPreviewDraw(); });
-  el.gridCols.addEventListener("change", invalidateAuto);
-  el.gridRows.addEventListener("change", invalidateAuto);
-  el.gridLine.addEventListener("input", requestPreviewDraw);
-  el.seed.addEventListener("change", invalidateAuto);
-  el.autoFill.addEventListener("input", invalidateAuto);
-  el.autoScale.addEventListener("change", invalidateAuto);
-  el.autoSmooth.addEventListener("input", invalidateAuto);
-
-  // ---------- exports ----------
+  // exports
   el.btnExportTile.addEventListener("click", ()=>{
     const flat = flattenVisibleToImageData();
     const tmp = createCanvas(state.tileSize,state.tileSize);
@@ -2521,7 +2169,7 @@
   });
 
   el.btnExportSet.addEventListener("click", ()=>{
-    const cols = state.cols;
+    const cols = clamp(parseInt(el.cols.value,10)||12,4,64);
     const rows = Math.ceil(state.capacity / cols);
     const atlas = createCanvas(cols*state.tileSize, rows*state.tileSize);
     const actx = ctx2d(atlas);
@@ -2543,90 +2191,67 @@
     downloadCanvasPNG(atlas, `tileset_${state.tileSize}px_${state.capacity}tiles_${cols}cols.png`);
   });
 
-  // ---------- general wiring ----------
-  el.tileSize.addEventListener("change", ensureTileSize);
-
-  el.capacity.addEventListener("change", ()=>{
-    pushTilesetUndo();
-    rebuildTilesetStorage();
-    renderTilesetGrid();
-    requestPreviewDraw();
-  });
-
-  el.cols.addEventListener("change", ()=>{
-    state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
-    renderTilesetGrid();
-    requestPreviewDraw();
-  });
-
-  el.slot.addEventListener("change", ()=>{
-    const v = clamp(parseInt(el.slot.value,10) || 1, 1, state.capacity);
-    state.selectedSlot = v-1;
-    el.slotLabel.textContent = String(v);
-    renderTilesetGrid();
-    requestPreviewDraw();
-  });
-
-  el.btnUndoTileset.addEventListener("click", undoTileset);
-  el.btnUndoWork.addEventListener("click", undoWorking);
-  el.editZoom.addEventListener("input", updateEditorCanvas);
-  el.brush.addEventListener("input", ()=>drawEditor());
-
-  // Hotkeys
-  window.addEventListener("keydown", (e)=>{
-    const k = e.key.toLowerCase();
-    if ((e.ctrlKey || e.metaKey) && k==="z" && !e.shiftKey){ e.preventDefault(); undoWorking(); }
-    if ((e.ctrlKey || e.metaKey) && k==="z" && e.shiftKey){ e.preventDefault(); undoTileset(); }
-
-    if (k==="b") setTool("brush");
-    if (k==="e") setTool("eraser");
-    if (k==="i") setTool("picker");
-    if (k==="f") setTool("fill");
-    if (k==="r") setTool("selRect");
-    if (k==="l") setTool("selLasso");
-
-    if (k==="escape"){
-      e.preventDefault();
-      snapshotWorking();
-      clearSelection();
-    }
-  });
+  // tileset selection buttons
+  el.previewSize.addEventListener("change", ()=>{ resizePreviewCanvasToFrame(); requestPreviewDraw(); });
+  el.previewMode.addEventListener("change", requestPreviewDraw);
+  el.gridCols.addEventListener("change", requestPreviewDraw);
+  el.gridRows.addEventListener("change", requestPreviewDraw);
+  el.gridLine.addEventListener("input", requestPreviewDraw);
+  el.seed.addEventListener("change", requestPreviewDraw);
 
   // ---------- init ----------
   function init(){
     state.tileSize = parseInt(el.tileSize.value,10);
     state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
     rebuildTilesetStorage();
-
     ensureAtLeastOneLayer();
-    ensureSelectionMask();
     renderLayersUI();
 
-    rebuildPaletteFromFlattened();
-    renderPaletteUI();
-    syncPaletteUI();
-
-    updateEditorCanvas();
-    syncWorkToDisplay();
-
+    // start with slot 1 selected for preview
     state.selectedForPreview.add(state.selectedSlot);
     el.selCount.textContent = String(state.selectedForPreview.size);
 
     renderTilesetGrid();
     setTool("brush");
-    applySimplifyPreset();
-    applySeamPreset();
+    updateEditorCanvas();
+    syncWorkToDisplay();
+    rebuildPaletteFromFlattened();
 
     resizePreviewCanvasToFrame();
     window.addEventListener("resize", ()=>{ resizePreviewCanvasToFrame(); requestPreviewDraw(); });
 
     setStatus("Ready.");
-
     (function tick(){
       drawPreview();
+      drawEditor();
       requestAnimationFrame(tick);
     })();
   }
+
+  // preview selection controls
+  el.selAll.addEventListener("click", ()=>{
+    state.selectedForPreview = new Set([...Array(state.capacity)].map((_,i)=>i).filter(i=>!!state.tiles[i]));
+    if (state.selectedForPreview.size===0) state.selectedForPreview.add(state.selectedSlot);
+    el.selCount.textContent = String(state.selectedForPreview.size);
+    renderTilesetGrid(); requestPreviewDraw();
+  });
+  el.selNone.addEventListener("click", ()=>{
+    state.selectedForPreview.clear();
+    el.selCount.textContent = "0";
+    renderTilesetGrid(); requestPreviewDraw();
+  });
+  el.selInvert.addEventListener("click", ()=>{
+    const s = new Set();
+    for (let i=0;i<state.capacity;i++){
+      if (!state.selectedForPreview.has(i) && state.tiles[i]) s.add(i);
+    }
+    state.selectedForPreview = s;
+    el.selCount.textContent = String(state.selectedForPreview.size);
+    renderTilesetGrid(); requestPreviewDraw();
+  });
+
+  // slot grid click: already handled; but ctrl/shift multi selection is inside renderTilesetGrid (edit load).
+  // (kept: use ctrl/shift inside each cell.)
 
   init();
 })();
