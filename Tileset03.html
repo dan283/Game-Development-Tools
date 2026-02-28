@@ -1182,6 +1182,8 @@
 
   // ---------- working + editor drawing ----------
   function syncWorkToDisplay(){
+    requestEditorRedraw();
+
     const ctx = el.work.getContext("2d");
     ctx.imageSmoothingEnabled = false;
     const w=state.tileSize, h=state.tileSize;
@@ -1397,6 +1399,7 @@
     }
 
     L.img = img;
+    requestEditorRedraw();
     syncWorkToDisplay();
     requestPreviewDraw();
     setStatus("Fill done.");
@@ -1451,6 +1454,7 @@
     }
 
     L.img = img;
+    requestEditorRedraw();	
     syncWorkToDisplay();
     requestPreviewDraw();
   }
