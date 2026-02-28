@@ -1,0 +1,2300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TileForge (v7) — Layers + Palette Edit + Recolor + Seamless/Simplify on Active/All Layers</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0d12; color:#e9eef7; }
+  header { padding: 12px 14px; border-bottom:1px solid #1c2330; background:#0d1220; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .title { font-weight:800; letter-spacing:.2px; }
+  .sub { font-size:12px; opacity:.8; }
+  .pill { font-size:11px; padding:3px 8px; border:1px solid #293246; border-radius:999px; opacity:.85; white-space:nowrap; }
+
+  main { height: calc(100vh - 54px); display:grid; grid-template-columns: 480px 1fr; gap: 12px; padding: 12px; overflow:hidden; }
+  .panel, .stage { border:1px solid #1c2330; border-radius:14px; background:#0f1420; overflow:hidden; min-height:0; }
+  .panel { display:flex; flex-direction:column; }
+  .panel h2 { margin:0; padding:10px 12px; font-size:13px; border-bottom:1px solid #1c2330; background:#0d1220; }
+  .panel .content { padding:10px 12px; display:grid; gap:10px; overflow:auto; min-height:0; }
+  .footer { padding:8px 12px; border-top:1px solid #1c2330; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+
+  label { font-size:12px; opacity:.9; display:grid; gap:4px; }
+  input, select, button {
+    background:#0b0f18; color:#e9eef7; border:1px solid #293246;
+    border-radius:10px; padding:8px 10px; font-size:13px;
+  }
+  input[type="range"] { padding:0; height: 30px; }
+  input[type="color"]{ padding:4px; height:36px; }
+  button { cursor:pointer; font-weight:700; }
+  button:hover { border-color:#3b4a68; }
+  .row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .row3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; }
+  .btnRow { display:flex; gap:8px; flex-wrap:wrap; }
+  .hint { font-size:12px; opacity:.78; line-height:1.35; }
+  .mini { font-size:11px; opacity:.82; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; background:#0b0f18; border:1px solid #293246;
+    border-radius:8px; padding:2px 6px; font-size:11px; }
+
+  .stage { padding: 10px; display:grid; grid-template-columns: 1fr 620px; gap: 12px; overflow:hidden; min-height:0; }
+  .card { border:1px solid #1c2330; border-radius:14px; overflow:hidden; background:#0f1420; min-height:0; display:flex; flex-direction:column; }
+  .cardHead { padding:10px 12px; border-bottom:1px solid #1c2330; background:#0d1220; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .cardBody { padding: 10px 12px; overflow:auto; min-height:0; }
+
+  /* no soft scaling */
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; background: transparent; border:1px solid #1c2330; border-radius:12px; }
+  .noStretch { width:auto !important; height:auto !important; max-width:100%; max-height:100%; display:block; }
+
+  /* Tileset split */
+  .tileSplit { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height:0; height:100%; }
+  .slotList { min-height:0; overflow:auto; border:1px solid #1c2330; border-radius:12px; padding:10px; background:#0b0f18; }
+  .slotTop { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .slotGrid { display:grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .cell {
+    border:1px solid #293246; border-radius:10px; background:#0f1420;
+    padding:6px; cursor:pointer; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    aspect-ratio: 1 / 1;
+    user-select:none;
+  }
+  .cell.sel { outline:2px solid #e9eef7; outline-offset:2px; }
+  .cell.multi { outline:2px solid #7dd3fc; outline-offset:2px; }
+  .badge {
+    position:absolute; top:6px; left:6px;
+    font-size:10px; padding:2px 6px;
+    border:1px solid #293246; border-radius:999px;
+    background:#0b0f18; opacity:.88;
+  }
+  .thumb { width:100%; height:100%; border:none; border-radius:8px; }
+
+  /* Preview pane */
+  .previewPane { min-height:0; display:flex; flex-direction:column; gap:10px; }
+  .previewControls { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .previewControls3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; }
+  .previewFrame {
+    border:1px solid #1c2330; border-radius:12px; background:#0b0f18;
+    padding:10px; min-height:0; flex: 1 1 auto;
+    overflow:hidden; position:relative;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .overlayHUD {
+    position:absolute; top:12px; left:12px;
+    font-size:11px; padding:6px 8px;
+    border:1px solid #293246; border-radius:10px;
+    background: rgba(11,15,24,.72);
+    backdrop-filter: blur(4px);
+    pointer-events:none;
+  }
+
+  /* Editor */
+  .editorWrap { display:grid; gap:10px; }
+  .swatches { display:grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .swatch { height: 26px; border-radius: 10px; border:1px solid #293246; cursor:pointer; position:relative; }
+  .swatch.sel::after { content:""; position:absolute; inset:4px; border:2px solid #e9eef7; border-radius: 8px; opacity:.9; }
+
+  .toolRow { display:flex; gap:8px; flex-wrap:wrap; }
+  .toolRow button { flex: 1 1 auto; }
+
+  .workRow { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items:start; }
+  .workBox { display:grid; gap:6px; }
+
+  .layerList { border:1px solid #1c2330; border-radius:12px; padding:10px; background:#0b0f18; display:grid; gap:6px; }
+  .layerItem{
+    border:1px solid #293246; border-radius:10px; padding:8px;
+    display:grid; grid-template-columns: 22px 1fr auto; gap:8px; align-items:center;
+    cursor:pointer;
+  }
+  .layerItem.active{ outline:2px solid #e9eef7; outline-offset:2px; }
+  .layerBtns{ display:flex; gap:6px; }
+  .tinyBtn{ padding:6px 8px; font-size:12px; border-radius:10px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="title">TileForge (v7)</div>
+    <div class="sub">Layers • Editable palette • Picker fixed • Recolor (replace) • Seamless/Simplify apply to active or all layers</div>
+  </div>
+  <div class="pill">Single file • Alpha PNG export • 32px default</div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Controls</h2>
+    <div class="content">
+      <label>Upload image (PNG/JPG/WebP)
+        <input id="file" type="file" accept="image/*" />
+      </label>
+
+      <div class="row">
+        <label>Tile Size
+          <select id="tileSize">
+            <option>16</option>
+            <option selected>32</option>
+            <option>48</option>
+            <option>64</option>
+          </select>
+        </label>
+        <label>Fit Mode
+          <select id="fitMode">
+            <option value="contain" selected>Contain</option>
+            <option value="cover">Cover</option>
+            <option value="stretch">Stretch</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Tileset Columns (export)
+          <input id="cols" type="number" min="4" max="64" value="12" />
+        </label>
+        <label>Tileset Capacity
+          <select id="capacity">
+            <option value="64">64</option>
+            <option value="96" selected>96</option>
+            <option value="128">128</option>
+            <option value="192">192</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Selected Slot (editing)
+          <input id="slot" type="number" min="1" value="1" />
+        </label>
+        <label>Upload auto-applies to slot
+          <select id="autoApplyUpload">
+            <option value="on" selected>On</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Effects apply to
+          <select id="effectScope">
+            <option value="active" selected>Active layer</option>
+            <option value="visible">All visible layers</option>
+            <option value="all">All layers</option>
+          </select>
+        </label>
+        <label>Upload goes to
+          <select id="uploadTarget">
+            <option value="active" selected>Active layer</option>
+            <option value="base">Base layer (L1)</option>
+            <option value="replaceAll">Replace all layers</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="btnRow">
+        <button id="btnFit">Fit To Size (to target layer)</button>
+        <button id="btnApplyToSlot">Apply Working (flatten) → Slot</button>
+        <button id="btnUndoTileset">Undo Tileset</button>
+      </div>
+
+      <details open>
+        <summary class="mini">Palette</summary>
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <div class="row">
+            <label>Selected color
+              <input id="palColor" type="color" value="#ffffff" />
+            </label>
+            <label>Picked color
+              <input id="pickedColor" type="color" value="#ffffff" disabled />
+            </label>
+          </div>
+          <div class="btnRow">
+            <button id="btnAddSwatch">Add swatch</button>
+            <button id="btnAddPicked">Add picked</button>
+            <button id="btnDelSwatch">Delete swatch</button>
+          </div>
+          <div class="row">
+            <label>Auto palette colors
+              <input id="autoPalCount" type="number" min="2" max="24" value="10" />
+            </label>
+            <label>&nbsp;
+              <button id="btnRebuildPalette">Rebuild palette from tile</button>
+            </label>
+          </div>
+          <div class="hint">Click a swatch to select it. Changing “Selected color” edits that swatch.</div>
+        </div>
+      </details>
+
+      <details open>
+        <summary class="mini">Recolor / Replace</summary>
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <div class="row">
+            <label>From swatch #
+              <input id="repFrom" type="number" min="1" value="1" />
+            </label>
+            <label>To swatch #
+              <input id="repTo" type="number" min="1" value="1" />
+            </label>
+          </div>
+          <div class="row">
+            <label>Tolerance (0 exact)
+              <input id="repTol" type="range" min="0" max="80" step="1" value="0" />
+            </label>
+            <label>Include transparent
+              <select id="repAlpha">
+                <option value="no" selected>No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </label>
+          </div>
+          <div class="btnRow">
+            <button id="btnReplace">Replace colors (scope)</button>
+            <button id="btnQuantize">Quantize to palette (scope)</button>
+          </div>
+        </div>
+      </details>
+
+      <details open>
+        <summary class="mini">Layers</summary>
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <div class="btnRow">
+            <button id="btnAddLayer">Add layer</button>
+            <button id="btnDupLayer">Duplicate layer</button>
+            <button id="btnDelLayer">Delete layer</button>
+          </div>
+          <div class="btnRow">
+            <button id="btnLayerUp">Move up</button>
+            <button id="btnLayerDown">Move down</button>
+            <button id="btnToggleVis">Toggle visibility</button>
+          </div>
+          <div class="hint">Edits affect the active layer only. Working tile display is the flattened composite of visible layers.</div>
+        </div>
+      </details>
+
+      <details open>
+        <summary class="mini">Make Seamless</summary>
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <div class="row">
+            <label>Preset
+              <select id="seamPreset">
+                <option value="crisp" selected>Crisp (minimal blur)</option>
+                <option value="balanced">Balanced</option>
+                <option value="strong">Strong (aggressive)</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label>Margin (px)
+              <input id="seamMargin" type="number" min="1" max="16" value="5" />
+            </label>
+          </div>
+          <div class="row">
+            <label>Guide Blend (0..1)
+              <input id="seamGuide" type="range" min="0" max="1" step="0.01" value="0.32" />
+            </label>
+            <label>Edge Keep (0..1)
+              <input id="seamEdgeKeep" type="range" min="0" max="1" step="0.01" value="0.82" />
+            </label>
+          </div>
+          <div class="row">
+            <label>Band Curve
+              <input id="seamCurve" type="range" min="0.5" max="3" step="0.01" value="1.85" />
+            </label>
+            <label>Post Sharpen
+              <input id="seamSharpen" type="range" min="0" max="1" step="0.01" value="0.35" />
+            </label>
+          </div>
+          <div class="btnRow">
+            <button id="btnSeamless">Make Seamless (scope)</button>
+            <button id="btnUndoWork">Undo Working</button>
+            <button id="btnResetWork">Reset From Slot</button>
+          </div>
+        </div>
+      </details>
+
+      <details open>
+        <summary class="mini">Simplify</summary>
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <div class="row">
+            <label>Preset
+              <select id="simpPreset">
+                <option value="clean" selected>Clean Pixel (crisp)</option>
+                <option value="photo">Noisy Photo → Pixel</option>
+                <option value="soft">Soft Stylized</option>
+                <option value="hi">High Contrast</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label>Max Colors
+              <input id="simpColors" type="number" min="2" max="32" value="12" />
+            </label>
+          </div>
+
+          <div class="row">
+            <label>Pre-smooth (0 = off)
+              <input id="simpSmooth" type="range" min="0" max="1" step="0.01" value="0.06" />
+            </label>
+            <label>Edge Preserve
+              <select id="simpEdge">
+                <option value="on" selected>On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="row">
+            <label>Dither
+              <select id="simpDither">
+                <option value="on" selected>On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+            <label>Dither Amount
+              <input id="simpDitherAmt" type="range" min="0" max="1" step="0.01" value="0.55" />
+            </label>
+          </div>
+
+          <div class="btnRow">
+            <button id="btnSimplify">Simplify (scope)</button>
+          </div>
+        </div>
+      </details>
+
+      <div class="btnRow">
+        <button id="btnExportTile">Export Flattened Tile PNG</button>
+        <button id="btnExportSet">Export Tileset PNG</button>
+      </div>
+
+      <div class="hint">
+        Hotkeys: <span class="kbd">Ctrl+Z</span> undo working • <span class="kbd">Ctrl+Shift+Z</span> undo tileset • <span class="kbd">B</span> brush • <span class="kbd">E</span> eraser • <span class="kbd">I</span> picker
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="mini">Preview: drag pan • wheel zoom • multi-select (Ctrl/Shift).</span>
+      <span class="mini mono" id="status">Ready.</span>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div class="card">
+      <div class="cardHead">
+        <strong>Tileset</strong>
+        <span class="mini" id="tilesetInfo"></span>
+      </div>
+
+      <div class="cardBody" style="min-height:0;">
+        <div class="tileSplit">
+          <div class="slotList">
+            <div class="slotTop">
+              <div class="mini">Slots</div>
+              <div class="btnRow" style="margin:0;">
+                <button id="selAll" title="Select all for preview">All</button>
+                <button id="selNone" title="Clear preview selection">None</button>
+                <button id="selInvert" title="Invert preview selection">Invert</button>
+              </div>
+            </div>
+            <div class="hint" style="margin-bottom:8px;">
+              Click = edit slot • Ctrl+Click = toggle preview selection • Shift+Click = range select
+            </div>
+            <div class="slotGrid" id="slotGrid"></div>
+          </div>
+
+          <div class="previewPane">
+            <div class="previewControls">
+              <label>Preview Size
+                <select id="previewSize">
+                  <option value="480">480 px</option>
+                  <option value="620" selected>620 px</option>
+                  <option value="820">820 px</option>
+                  <option value="980">980 px</option>
+                </select>
+              </label>
+              <label>Preview Mode
+                <select id="previewMode">
+                  <option value="grid" selected>Tile Grid (cycle)</option>
+                  <option value="random">Random (selected tiles)</option>
+                  <option value="checker">Checker (first 2)</option>
+                  <option value="stripesRow">Row stripes (cycle)</option>
+                  <option value="stripesCol">Column stripes (cycle)</option>
+                  <option value="noise">Noise regions (ground)</option>
+                  <option value="autotile16">Autotile (bitmask 16)</option>
+                  <option value="tileset">Full Tileset Atlas</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="previewControls3">
+              <label>Grid Columns
+                <input id="gridCols" type="number" min="2" max="128" value="14" />
+              </label>
+              <label>Grid Rows
+                <input id="gridRows" type="number" min="2" max="128" value="14" />
+              </label>
+              <label>Grid Lines
+                <input id="gridLine" type="range" min="0" max="1" step="0.01" value="0.15" />
+              </label>
+            </div>
+
+            <div class="previewControls3">
+              <label>Seed
+                <input id="seed" type="number" value="1" />
+              </label>
+              <label>Autotile Fill %
+                <input id="autoFill" type="range" min="0.1" max="0.9" step="0.01" value="0.55" />
+              </label>
+              <label>Autotile Scale
+                <input id="autoScale" type="number" min="1" max="12" value="3" />
+              </label>
+            </div>
+
+            <div class="previewControls3">
+              <label>Autotile Smoothing
+                <input id="autoSmooth" type="range" min="0" max="1" step="0.01" value="0" />
+              </label>
+              <label>Reset View
+                <button id="btnResetView">Reset</button>
+              </label>
+              <label>Autotile Map
+                <button id="btnNewAutoMap">New</button>
+              </label>
+            </div>
+
+            <div class="previewFrame" id="previewFrame">
+              <canvas id="bigPreview" class="noStretch"></canvas>
+              <div class="overlayHUD mono" id="hud">zoom 1.00x • pan 0,0</div>
+            </div>
+
+            <div class="mini">
+              Selected for preview: <span class="mono" id="selCount">0</span> • Editing slot: <span class="mono" id="slotLabel">1</span>
+            </div>
+            <div class="hint" id="autoHint">
+              Autotile expects <b>16 tiles selected</b>. If fewer, it shows the filled/empty field so Fill/Scale/Smoothing still affects preview.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cardHead">
+        <div>
+          <strong>Working Tile + Editor</strong>
+          <div class="mini" id="workInfo">No image loaded — empty tile.</div>
+        </div>
+        <div class="mini">Tool: <span class="mono" id="toolLabel">brush</span></div>
+      </div>
+
+      <div class="cardBody" style="display:grid; gap:10px; min-height:0;">
+        <div class="workRow">
+          <div class="workBox">
+            <div class="mini">Flattened (visible layers)</div>
+            <canvas id="work" width="32" height="32"></canvas>
+          </div>
+          <div class="workBox">
+            <div class="mini">Editor Zoom / Brush</div>
+            <div class="row">
+              <label>Zoom
+                <input id="editZoom" type="range" min="6" max="24" value="10" />
+              </label>
+              <label>Brush
+                <input id="brush" type="number" min="1" max="8" value="1" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div style="display:grid; gap:6px;">
+            <div class="mini">Layers</div>
+            <div class="layerList" id="layerList"></div>
+          </div>
+          <div style="display:grid; gap:6px;">
+            <div class="mini">Palette</div>
+            <div class="swatches" id="swatches"></div>
+          </div>
+        </div>
+
+        <div class="toolRow">
+          <button id="toolBrush">Brush (B)</button>
+          <button id="toolEraser">Eraser (E)</button>
+          <button id="toolPicker">Picker (I)</button>
+        </div>
+
+        <canvas id="editor" width="320" height="320"></canvas>
+
+        <div class="hint">
+          Picker reads the <b>flattened</b> color under cursor (visible layers), then you can “Add picked” to palette or use Replace.
+        </div>
+      </div>
+
+      <div class="footer">
+        <span class="mini">Preview: pan drag • zoom wheel</span>
+        <span class="mini mono">Active layer edits only</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    file: $("file"), tileSize: $("tileSize"), fitMode: $("fitMode"),
+    cols: $("cols"), capacity: $("capacity"), slot: $("slot"),
+    autoApplyUpload: $("autoApplyUpload"),
+    effectScope: $("effectScope"),
+    uploadTarget: $("uploadTarget"),
+    btnFit: $("btnFit"), btnApplyToSlot: $("btnApplyToSlot"),
+    btnUndoTileset: $("btnUndoTileset"),
+
+    // palette
+    palColor: $("palColor"), pickedColor: $("pickedColor"),
+    btnAddSwatch: $("btnAddSwatch"), btnAddPicked: $("btnAddPicked"), btnDelSwatch: $("btnDelSwatch"),
+    autoPalCount: $("autoPalCount"), btnRebuildPalette: $("btnRebuildPalette"),
+
+    // recolor
+    repFrom: $("repFrom"), repTo: $("repTo"), repTol: $("repTol"), repAlpha: $("repAlpha"),
+    btnReplace: $("btnReplace"), btnQuantize: $("btnQuantize"),
+
+    // layers
+    btnAddLayer: $("btnAddLayer"), btnDupLayer: $("btnDupLayer"), btnDelLayer: $("btnDelLayer"),
+    btnLayerUp: $("btnLayerUp"), btnLayerDown: $("btnLayerDown"), btnToggleVis: $("btnToggleVis"),
+    layerList: $("layerList"),
+
+    // seamless
+    seamPreset: $("seamPreset"), seamMargin: $("seamMargin"),
+    seamGuide: $("seamGuide"), seamEdgeKeep: $("seamEdgeKeep"),
+    seamCurve: $("seamCurve"), seamSharpen: $("seamSharpen"),
+    btnSeamless: $("btnSeamless"),
+    btnResetWork: $("btnResetWork"), btnUndoWork: $("btnUndoWork"),
+
+    // simplify
+    simpPreset: $("simpPreset"), simpColors: $("simpColors"),
+    simpSmooth: $("simpSmooth"), simpEdge: $("simpEdge"),
+    simpDither: $("simpDither"), simpDitherAmt: $("simpDitherAmt"),
+    btnSimplify: $("btnSimplify"),
+
+    btnExportTile: $("btnExportTile"), btnExportSet: $("btnExportSet"),
+    status: $("status"),
+
+    tilesetInfo: $("tilesetInfo"), slotGrid: $("slotGrid"),
+    selAll: $("selAll"), selNone: $("selNone"), selInvert: $("selInvert"),
+
+    previewFrame: $("previewFrame"), bigPreview: $("bigPreview"), hud: $("hud"),
+    previewSize: $("previewSize"), previewMode: $("previewMode"),
+    gridCols: $("gridCols"), gridRows: $("gridRows"), gridLine: $("gridLine"),
+    seed: $("seed"),
+    autoFill: $("autoFill"), autoScale: $("autoScale"), autoSmooth: $("autoSmooth"),
+    btnResetView: $("btnResetView"), btnNewAutoMap: $("btnNewAutoMap"),
+    selCount: $("selCount"), slotLabel: $("slotLabel"),
+    autoHint: $("autoHint"),
+
+    work: $("work"), workInfo: $("workInfo"),
+    editZoom: $("editZoom"), brush: $("brush"),
+    swatches: $("swatches"),
+    toolBrush: $("toolBrush"), toolEraser: $("toolEraser"), toolPicker: $("toolPicker"),
+    toolLabel: $("toolLabel"),
+    editor: $("editor"),
+  };
+
+  function setStatus(msg){ el.status.textContent = msg; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function createCanvas(w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
+  function ctx2d(c){
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    return ctx;
+  }
+  function downloadCanvasPNG(canvas, filename){
+    const a = document.createElement("a");
+    a.download = filename;
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  }
+  function hexToRgb(hex){
+    const h = hex.replace("#","");
+    const v = parseInt(h,16);
+    return [(v>>16)&255, (v>>8)&255, v&255];
+  }
+  function rgbToHex(r,g,b){
+    const to = (x)=> x.toString(16).padStart(2,"0");
+    return `#${to(r)}${to(g)}${to(b)}`;
+  }
+  function dist3(a,b){ const dr=a[0]-b[0], dg=a[1]-b[1], db=a[2]-b[2]; return Math.sqrt(dr*dr+dg*dg+db*db); }
+
+  const BAYER4 = [
+    [ 0,  8,  2, 10],
+    [12,  4, 14,  6],
+    [ 3, 11,  1,  9],
+    [15,  7, 13,  5],
+  ];
+
+  const state = {
+    tileSize: 32,
+    cols: 12,
+    capacity: 96,
+    selectedSlot: 0,
+    selectedForPreview: new Set(),
+    lastClickedIndex: 0,
+
+    tiles: [], // flattened ImageData|null
+
+    originalImage: null,
+
+    // layers (bottom->top). Each is {name, visible, img: ImageData}
+    layers: [],
+    activeLayer: 0,
+
+    // palette
+    palette: [[255,255,255],[0,0,0]],
+    selectedSwatch: 0,
+    picked: [255,255,255],
+
+    tool: "brush",
+    workUndo: [],      // snapshots of layers + palette
+    tilesetUndo: [],
+
+    // preview cam
+    cam: { zoom: 1, panX: 0, panY: 0 },
+
+    // autotile field cache
+    autoField: null,
+    autoFieldCols: 0,
+    autoFieldRows: 0,
+    autoFieldSeed: 1,
+    _autoFill: 0, _autoScale: 0, _autoSmooth: 0,
+  };
+
+  function cloneImageData(img){
+    const out = new ImageData(img.width, img.height);
+    out.data.set(img.data);
+    return out;
+  }
+
+  // ---------- layers ----------
+  function newEmptyLayer(name){
+    const img = new ImageData(state.tileSize, state.tileSize);
+    return { name, visible:true, img };
+  }
+  function ensureAtLeastOneLayer(){
+    if (state.layers.length) return;
+    state.layers = [ newEmptyLayer("L1") ];
+    state.activeLayer = 0;
+  }
+  function renameDefaultLayers(){
+    for (let i=0;i<state.layers.length;i++){
+      if (!state.layers[i].name || state.layers[i].name.startsWith("L")) state.layers[i].name = `L${i+1}`;
+    }
+  }
+
+  function snapshotWorking(){
+    // snapshot layers + palette + active layer
+    state.workUndo.push({
+      layers: state.layers.map(l => ({ name:l.name, visible:l.visible, img: cloneImageData(l.img) })),
+      activeLayer: state.activeLayer,
+      palette: state.palette.map(c => [c[0],c[1],c[2]]),
+      selectedSwatch: state.selectedSwatch,
+    });
+    if (state.workUndo.length > 60) state.workUndo.shift();
+  }
+  function undoWorking(){
+    if (!state.workUndo.length) return;
+    const s = state.workUndo.pop();
+    state.layers = s.layers.map(l => ({ name:l.name, visible:l.visible, img: cloneImageData(l.img) }));
+    state.activeLayer = clamp(s.activeLayer, 0, state.layers.length-1);
+    state.palette = s.palette.map(c => [c[0],c[1],c[2]]);
+    state.selectedSwatch = clamp(s.selectedSwatch, 0, state.palette.length-1);
+    syncPaletteUI();
+    renderLayersUI();
+    renderPaletteUI();
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus("Undo (working).");
+  }
+
+  function getScopeLayerIndices(scope){
+    if (scope === "active") return [state.activeLayer];
+    if (scope === "visible"){
+      const idx=[];
+      for (let i=0;i<state.layers.length;i++) if (state.layers[i].visible) idx.push(i);
+      return idx.length ? idx : [state.activeLayer];
+    }
+    return [...Array(state.layers.length)].map((_,i)=>i);
+  }
+
+  function flattenVisibleToImageData(){
+    const w=state.tileSize, h=state.tileSize;
+    const out = new ImageData(w,h);
+    const d = out.data;
+    // alpha blend in order
+    for (let i=0;i<state.layers.length;i++){
+      const L = state.layers[i];
+      if (!L.visible) continue;
+      const s = L.img.data;
+      for (let p=0;p<d.length;p+=4){
+        const sa = s[p+3]/255;
+        if (sa<=0) continue;
+        const da = d[p+3]/255;
+        const outA = sa + da*(1-sa);
+        if (outA<=0){ d[p+3]=0; continue; }
+        d[p]   = Math.round((s[p]*sa + d[p]*da*(1-sa)) / outA);
+        d[p+1] = Math.round((s[p+1]*sa + d[p+1]*da*(1-sa)) / outA);
+        d[p+2] = Math.round((s[p+2]*sa + d[p+2]*da*(1-sa)) / outA);
+        d[p+3] = Math.round(outA*255);
+      }
+    }
+    return out;
+  }
+
+  function getFlattenedPixel(x,y){
+    const w=state.tileSize;
+    const idx = (y*w+x)*4;
+    // composite at this pixel only, bottom->top
+    let r=0,g=0,b=0,a=0; // a in 0..1
+    for (let i=0;i<state.layers.length;i++){
+      const L = state.layers[i];
+      if (!L.visible) continue;
+      const s = L.img.data;
+      const sa = s[idx+3]/255;
+      if (sa<=0) continue;
+      const outA = sa + a*(1-sa);
+      r = (s[idx]*sa + r*a*(1-sa)) / outA;
+      g = (s[idx+1]*sa + g*a*(1-sa)) / outA;
+      b = (s[idx+2]*sa + b*a*(1-sa)) / outA;
+      a = outA;
+    }
+    return [Math.round(r),Math.round(g),Math.round(b),Math.round(a*255)];
+  }
+
+  // ---------- tileset undo ----------
+  function pushTilesetUndo(){
+    const snap = {
+      tiles: state.tiles.map(t => t ? cloneImageData(t) : null),
+      selectedSlot: state.selectedSlot,
+      selectedForPreview: new Set([...state.selectedForPreview]),
+    };
+    state.tilesetUndo.push(snap);
+    if (state.tilesetUndo.length > 30) state.tilesetUndo.shift();
+  }
+  function undoTileset(){
+    if (!state.tilesetUndo.length) return;
+    const snap = state.tilesetUndo.pop();
+    state.tiles = snap.tiles.map(t => t ? cloneImageData(t) : null);
+    state.selectedSlot = clamp(snap.selectedSlot, 0, state.capacity-1);
+    state.selectedForPreview = new Set([...snap.selectedForPreview].filter(i => i>=0 && i<state.capacity));
+    el.slot.value = String(state.selectedSlot+1);
+    el.slotLabel.textContent = String(state.selectedSlot+1);
+    renderTilesetGrid();
+    requestPreviewDraw();
+    setStatus("Undo (tileset).");
+  }
+
+  // ---------- palette ----------
+  function rgbToKey(r,g,b){ return (r<<16) | (g<<8) | b; }
+  function keyToRgb(k){ return [(k>>16)&255, (k>>8)&255, k&255]; }
+  function buildPaletteFromImageData(img, maxColors=10){
+    const m = new Map();
+    const d = img.data;
+    for (let i=0;i<d.length;i+=4){
+      const a=d[i+3]; if (a<10) continue;
+      const r = (d[i]   & 0xF8);
+      const g = (d[i+1] & 0xF8);
+      const b = (d[i+2] & 0xF8);
+      const k = rgbToKey(r,g,b);
+      m.set(k, (m.get(k)||0)+1);
+    }
+    const arr = [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0, maxColors);
+    if (!arr.length) return [[255,255,255],[0,0,0]];
+    return arr.map(([k])=> keyToRgb(k));
+  }
+  function nearestColor(r,g,b, palette){
+    let best = palette[0], bestD = 1e18;
+    for (const c of palette){
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const d = dr*dr + dg*dg + db*db;
+      if (d<bestD){ bestD=d; best=c; }
+    }
+    return best;
+  }
+
+  function renderPaletteUI(){
+    el.swatches.innerHTML = "";
+    state.palette.forEach((c, idx)=>{
+      const d = document.createElement("div");
+      d.className = "swatch" + (idx===state.selectedSwatch ? " sel" : "");
+      d.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+      d.title = `#${idx+1} rgb(${c[0]},${c[1]},${c[2]})`;
+      d.addEventListener("click", ()=>{
+        state.selectedSwatch = idx;
+        syncPaletteUI();
+        renderPaletteUI();
+      });
+      el.swatches.appendChild(d);
+    });
+  }
+  function syncPaletteUI(){
+    const c = state.palette[state.selectedSwatch] || [255,255,255];
+    el.palColor.value = rgbToHex(c[0],c[1],c[2]);
+    el.pickedColor.value = rgbToHex(state.picked[0],state.picked[1],state.picked[2]);
+    el.repFrom.max = String(state.palette.length);
+    el.repTo.max = String(state.palette.length);
+    el.repFrom.value = String(clamp(parseInt(el.repFrom.value||"1",10),1,state.palette.length));
+    el.repTo.value = String(clamp(parseInt(el.repTo.value||"1",10),1,state.palette.length));
+  }
+
+  function rebuildPaletteFromFlattened(){
+    const n = clamp(parseInt(el.autoPalCount.value,10) || 10, 2, 24);
+    const flat = flattenVisibleToImageData();
+    state.palette = buildPaletteFromImageData(flat, n);
+    state.selectedSwatch = 0;
+    syncPaletteUI();
+    renderPaletteUI();
+    setStatus("Palette rebuilt from flattened tile.");
+  }
+
+  // ---------- sizing / tileset storage ----------
+  function rebuildTilesetStorage(){
+    state.capacity = parseInt(el.capacity.value,10);
+    const old = state.tiles;
+    state.tiles = new Array(state.capacity).fill(null);
+    for (let i=0;i<Math.min(old.length, state.tiles.length); i++) state.tiles[i] = old[i];
+
+    state.selectedSlot = clamp(state.selectedSlot, 0, state.capacity-1);
+    el.slot.min = "1"; el.slot.max = String(state.capacity);
+    el.slot.value = String(state.selectedSlot+1);
+    el.slotLabel.textContent = String(state.selectedSlot+1);
+
+    state.selectedForPreview = new Set([...state.selectedForPreview].filter(i => i>=0 && i<state.capacity));
+    el.selCount.textContent = String(state.selectedForPreview.size);
+  }
+
+  function resampleImageDataNearest(img, newSize){
+    if (img.width === newSize && img.height === newSize) return cloneImageData(img);
+    const srcC = createCanvas(img.width, img.height);
+    srcC.getContext("2d").putImageData(img,0,0);
+    const dstC = createCanvas(newSize, newSize);
+    const dctx = dstC.getContext("2d");
+    dctx.imageSmoothingEnabled = false;
+    dctx.clearRect(0,0,newSize,newSize);
+    dctx.drawImage(srcC, 0,0, img.width,img.height, 0,0, newSize,newSize);
+    return dctx.getImageData(0,0,newSize,newSize);
+  }
+
+  function resampleAllToSize(newSize){
+    // tileset
+    pushTilesetUndo();
+    for (let i=0;i<state.tiles.length;i++){
+      if (!state.tiles[i]) continue;
+      state.tiles[i] = resampleImageDataNearest(state.tiles[i], newSize);
+    }
+    // layers
+    snapshotWorking();
+    for (const L of state.layers){
+      L.img = resampleImageDataNearest(L.img, newSize);
+    }
+  }
+
+  function ensureTileSize(){
+    const newSize = parseInt(el.tileSize.value,10);
+    if (newSize === state.tileSize) return;
+    resampleAllToSize(newSize);
+    state.tileSize = newSize;
+
+    el.work.width = newSize;
+    el.work.height = newSize;
+    el.work.getContext("2d").imageSmoothingEnabled = false;
+
+    updateEditorCanvas();
+    renderLayersUI();
+    syncWorkToDisplay();
+    renderTilesetGrid();
+    requestPreviewDraw();
+    setStatus("Tile size updated.");
+  }
+
+  // ---------- tileset UI ----------
+  function drawThumb(ctx, tile){
+    const ts = state.tileSize;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0,0,ts,ts);
+    const cell = Math.max(4, Math.floor(ts/8));
+    for (let y=0;y<ts;y+=cell){
+      for (let x=0;x<ts;x+=cell){
+        const v = ((x/cell + y/cell) % 2) ? 24 : 16;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(x,y,cell,cell);
+      }
+    }
+    if (!tile) return;
+    const tmp = createCanvas(tile.width, tile.height);
+    tmp.getContext("2d").putImageData(tile,0,0);
+    ctx.drawImage(tmp,0,0);
+  }
+
+  function renderTilesetGrid(){
+    el.slotGrid.innerHTML = "";
+    el.slotGrid.style.gridTemplateColumns = `repeat(6, 1fr)`;
+
+    for (let i=0;i<state.capacity;i++){
+      const cell = document.createElement("div");
+      const isEdit = i===state.selectedSlot;
+      const isMulti = state.selectedForPreview.has(i);
+      cell.className = "cell" + (isEdit ? " sel" : "") + (isMulti ? " multi" : "");
+
+      const badge = document.createElement("div");
+      badge.className = "badge";
+      badge.textContent = String(i+1);
+      cell.appendChild(badge);
+
+      const c = document.createElement("canvas");
+      c.className = "thumb";
+      c.width = state.tileSize;
+      c.height = state.tileSize;
+      drawThumb(c.getContext("2d"), state.tiles[i]);
+      cell.appendChild(c);
+
+      cell.addEventListener("click", (e)=>{
+        const ctrl = e.ctrlKey || e.metaKey;
+        const shift = e.shiftKey;
+
+        if (shift){
+          const a = state.lastClickedIndex ?? i;
+          const lo = Math.min(a,i), hi = Math.max(a,i);
+          for (let k=lo;k<=hi;k++) state.selectedForPreview.add(k);
+          state.lastClickedIndex = i;
+          el.selCount.textContent = String(state.selectedForPreview.size);
+          renderTilesetGrid();
+          requestPreviewDraw();
+          return;
+        }
+        if (ctrl){
+          if (state.selectedForPreview.has(i)) state.selectedForPreview.delete(i);
+          else state.selectedForPreview.add(i);
+          state.lastClickedIndex = i;
+          el.selCount.textContent = String(state.selectedForPreview.size);
+          renderTilesetGrid();
+          requestPreviewDraw();
+          return;
+        }
+
+        // edit slot: load flattened tile into base layer (or replaceAll per uploadTarget when you want)
+        state.selectedSlot = i;
+        state.lastClickedIndex = i;
+        el.slot.value = String(i+1);
+        el.slotLabel.textContent = String(i+1);
+
+        snapshotWorking();
+        ensureAtLeastOneLayer();
+        // Load slot tile into base layer and clear others (simple + predictable)
+        for (let li=0; li<state.layers.length; li++){
+          state.layers[li].img = new ImageData(state.tileSize,state.tileSize);
+          state.layers[li].visible = true;
+        }
+        if (state.tiles[i]){
+          state.layers[0].img = cloneImageData(state.tiles[i]);
+        }
+        state.activeLayer = 0;
+        renameDefaultLayers();
+        renderLayersUI();
+        syncWorkToDisplay();
+        rebuildPaletteFromFlattened();
+
+        renderTilesetGrid();
+        requestPreviewDraw();
+        setStatus(`Loaded slot ${i+1} into layers (flattened → L1).`);
+      });
+
+      el.slotGrid.appendChild(cell);
+    }
+
+    state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
+    el.tilesetInfo.textContent = `${state.capacity} slots • ${state.tileSize}px • export cols ${state.cols}`;
+  }
+
+  el.selAll.addEventListener("click", ()=>{
+    state.selectedForPreview = new Set([...Array(state.capacity)].map((_,i)=>i));
+    el.selCount.textContent = String(state.selectedForPreview.size);
+    renderTilesetGrid(); requestPreviewDraw();
+  });
+  el.selNone.addEventListener("click", ()=>{
+    state.selectedForPreview.clear();
+    el.selCount.textContent = "0";
+    renderTilesetGrid(); requestPreviewDraw();
+  });
+  el.selInvert.addEventListener("click", ()=>{
+    const s = new Set();
+    for (let i=0;i<state.capacity;i++) if (!state.selectedForPreview.has(i)) s.add(i);
+    state.selectedForPreview = s;
+    el.selCount.textContent = String(state.selectedForPreview.size);
+    renderTilesetGrid(); requestPreviewDraw();
+  });
+
+  // ---------- layers UI ----------
+  function renderLayersUI(){
+    el.layerList.innerHTML = "";
+    renameDefaultLayers();
+
+    state.layers.forEach((L, i)=>{
+      const item = document.createElement("div");
+      item.className = "layerItem" + (i===state.activeLayer ? " active" : "");
+      const chk = document.createElement("input");
+      chk.type="checkbox";
+      chk.checked = L.visible;
+      chk.addEventListener("click", (e)=>{ e.stopPropagation(); snapshotWorking(); L.visible = chk.checked; syncWorkToDisplay(); requestPreviewDraw(); });
+
+      const name = document.createElement("div");
+      name.className="mini";
+      name.textContent = `${L.name}${i===0 ? " (base)" : ""}`;
+
+      const btns = document.createElement("div");
+      btns.className="layerBtns";
+      const eye = document.createElement("button");
+      eye.className="tinyBtn";
+      eye.textContent = L.visible ? "👁" : "🚫";
+      eye.title = "Toggle visibility";
+      eye.addEventListener("click", (e)=>{ e.stopPropagation(); snapshotWorking(); L.visible = !L.visible; renderLayersUI(); syncWorkToDisplay(); requestPreviewDraw(); });
+
+      btns.appendChild(eye);
+
+      item.appendChild(chk);
+      item.appendChild(name);
+      item.appendChild(btns);
+
+      item.addEventListener("click", ()=>{
+        state.activeLayer = i;
+        renderLayersUI();
+        syncWorkToDisplay();
+      });
+
+      el.layerList.appendChild(item);
+    });
+  }
+
+  function addLayer(){
+    snapshotWorking();
+    state.layers.push(newEmptyLayer(`L${state.layers.length+1}`));
+    state.activeLayer = state.layers.length-1;
+    renderLayersUI();
+    syncWorkToDisplay();
+    setStatus("Layer added.");
+  }
+  function dupLayer(){
+    snapshotWorking();
+    const src = state.layers[state.activeLayer];
+    const copy = { name: `${src.name} copy`, visible:true, img: cloneImageData(src.img) };
+    state.layers.splice(state.activeLayer+1, 0, copy);
+    state.activeLayer = state.activeLayer+1;
+    renderLayersUI();
+    syncWorkToDisplay();
+    setStatus("Layer duplicated.");
+  }
+  function delLayer(){
+    if (state.layers.length<=1){ setStatus("Can't delete last layer."); return; }
+    snapshotWorking();
+    state.layers.splice(state.activeLayer,1);
+    state.activeLayer = clamp(state.activeLayer, 0, state.layers.length-1);
+    renderLayersUI();
+    syncWorkToDisplay();
+    setStatus("Layer deleted.");
+  }
+  function moveLayer(delta){
+    const i = state.activeLayer;
+    const j = i + delta;
+    if (j<0 || j>=state.layers.length) return;
+    snapshotWorking();
+    const tmp = state.layers[i];
+    state.layers[i] = state.layers[j];
+    state.layers[j] = tmp;
+    state.activeLayer = j;
+    renderLayersUI();
+    syncWorkToDisplay();
+    setStatus("Layer moved.");
+  }
+  function toggleVis(){
+    snapshotWorking();
+    state.layers[state.activeLayer].visible = !state.layers[state.activeLayer].visible;
+    renderLayersUI();
+    syncWorkToDisplay();
+    requestPreviewDraw();
+  }
+
+  el.btnAddLayer.addEventListener("click", addLayer);
+  el.btnDupLayer.addEventListener("click", dupLayer);
+  el.btnDelLayer.addEventListener("click", delLayer);
+  el.btnLayerUp.addEventListener("click", ()=>moveLayer(-1));
+  el.btnLayerDown.addEventListener("click", ()=>moveLayer(1));
+  el.btnToggleVis.addEventListener("click", toggleVis);
+
+  // ---------- working display + editor ----------
+  function syncWorkToDisplay(){
+    // draw flattened to small "work" canvas
+    const ctx = el.work.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    const w=state.tileSize, h=state.tileSize;
+
+    const cell = Math.max(4, Math.floor(w/8));
+    ctx.clearRect(0,0,w,h);
+    for (let y=0;y<h;y+=cell){
+      for (let x=0;x<w;x+=cell){
+        const v = ((x/cell + y/cell) % 2) ? 24 : 16;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(x,y,cell,cell);
+      }
+    }
+    const flat = flattenVisibleToImageData();
+    const tmp = createCanvas(w,h);
+    tmp.getContext("2d").putImageData(flat,0,0);
+    ctx.drawImage(tmp,0,0);
+
+    drawEditor();
+    el.workInfo.textContent = `Layers: ${state.layers.length} • Active: ${state.layers[state.activeLayer]?.name || "?"} • Visible flatten`;
+  }
+
+  function setTool(t){
+    state.tool = t;
+    el.toolLabel.textContent = t;
+    const on="#e9eef7", off="#293246";
+    el.toolBrush.style.borderColor = (t==="brush") ? on : off;
+    el.toolEraser.style.borderColor = (t==="eraser") ? on : off;
+    el.toolPicker.style.borderColor = (t==="picker") ? on : off;
+  }
+
+  function updateEditorCanvas(){
+    const z = parseInt(el.editZoom.value,10);
+    el.editor.width = state.tileSize * z;
+    el.editor.height = state.tileSize * z;
+    drawEditor();
+  }
+
+  function drawEditor(){
+    const z = parseInt(el.editZoom.value,10);
+    const ctx = el.editor.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+
+    const W = state.tileSize*z;
+    const H = state.tileSize*z;
+
+    const cell = Math.max(8, Math.floor(z*0.8));
+    ctx.clearRect(0,0,W,H);
+    for (let y=0;y<H;y+=cell){
+      for (let x=0;x<W;x+=cell){
+        const v = ((x/cell + y/cell) % 2) ? 24 : 16;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(x,y,cell,cell);
+      }
+    }
+
+    // draw flattened (visible layers)
+    const flat = flattenVisibleToImageData();
+    const tmp = createCanvas(state.tileSize, state.tileSize);
+    tmp.getContext("2d").putImageData(flat,0,0);
+    ctx.drawImage(tmp, 0,0, state.tileSize, state.tileSize, 0,0, W,H);
+
+    // grid overlay
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
+    for (let x=0;x<=state.tileSize;x++){
+      ctx.beginPath(); ctx.moveTo(x*z + 0.5, 0); ctx.lineTo(x*z + 0.5, H); ctx.stroke();
+    }
+    for (let y=0;y<=state.tileSize;y++){
+      ctx.beginPath(); ctx.moveTo(0, y*z + 0.5); ctx.lineTo(W, y*z + 0.5); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function editorPosFromMouse(ev){
+    const rect = el.editor.getBoundingClientRect();
+    const scaleX = el.editor.width / rect.width;
+    const scaleY = el.editor.height / rect.height;
+    const mx = (ev.clientX - rect.left) * scaleX;
+    const my = (ev.clientY - rect.top) * scaleY;
+    const z = parseInt(el.editZoom.value,10);
+    return { x: Math.floor(mx / z), y: Math.floor(my / z) };
+  }
+
+  function applyStroke(px,py){
+    const w=state.tileSize, h=state.tileSize;
+    if (px<0||py<0||px>=w||py>=h) return;
+
+    const bsz = clamp(parseInt(el.brush.value,10) || 1, 1, 8);
+    const half = Math.floor(bsz/2);
+
+    if (state.tool === "picker"){
+      const p = getFlattenedPixel(px,py);
+      state.picked = [p[0],p[1],p[2]];
+      el.pickedColor.value = rgbToHex(p[0],p[1],p[2]);
+      // also set selected swatch to nearest (nice UX)
+      let best=0, bestD=1e18;
+      for (let i=0;i<state.palette.length;i++){
+        const c = state.palette[i];
+        const dd = (p[0]-c[0])**2 + (p[1]-c[1])**2 + (p[2]-c[2])**2;
+        if (dd<bestD){ bestD=dd; best=i; }
+      }
+      state.selectedSwatch = best;
+      syncPaletteUI();
+      renderPaletteUI();
+      setStatus(`Picked rgb(${p[0]},${p[1]},${p[2]})`);
+      return;
+    }
+
+    const L = state.layers[state.activeLayer];
+    const img = cloneImageData(L.img); // safe edit (small tile)
+    const d = img.data;
+    const idxOf = (x,y)=> (y*w+x)*4;
+
+    const col = state.palette[state.selectedSwatch] || [255,255,255];
+
+    for (let yy=py-half; yy<py-half+bsz; yy++){
+      for (let xx=px-half; xx<px-half+bsz; xx++){
+        if (xx<0||yy<0||xx>=w||yy>=h) continue;
+        const i = idxOf(xx,yy);
+        if (state.tool === "eraser"){
+          d[i]=0; d[i+1]=0; d[i+2]=0; d[i+3]=0;
+        } else {
+          d[i]=col[0]; d[i+1]=col[1]; d[i+2]=col[2]; d[i+3]=255;
+        }
+      }
+    }
+
+    L.img = img;
+    syncWorkToDisplay();
+    requestPreviewDraw();
+  }
+
+  let editorDown=false;
+  el.editor.addEventListener("mousedown", (e)=>{
+    snapshotWorking();
+    editorDown=true;
+    const p=editorPosFromMouse(e);
+    applyStroke(p.x,p.y);
+  });
+  window.addEventListener("mouseup", ()=>{ editorDown=false; });
+  el.editor.addEventListener("mousemove", (e)=>{
+    if (!editorDown) return;
+    const p=editorPosFromMouse(e);
+    applyStroke(p.x,p.y);
+  });
+
+  // ---------- upload + fit ----------
+  function fitImageToLayer(img, layerIdx, mode){
+    const tw=state.tileSize, th=state.tileSize;
+    const cnv = createCanvas(tw,th);
+    const ctx = cnv.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0,0,tw,th);
+
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+
+    let sx=0, sy=0, sw=iw, sh=ih;
+    let dx=0, dy=0, dw=tw, dh=th;
+
+    if (mode === "contain"){
+      const scale = Math.min(tw/iw, th/ih);
+      dw = Math.round(iw*scale);
+      dh = Math.round(ih*scale);
+      dx = Math.floor((tw-dw)/2);
+      dy = Math.floor((th-dh)/2);
+    } else if (mode === "cover"){
+      const scale = Math.max(tw/iw, th/ih);
+      const cw = tw/scale, ch = th/scale;
+      sw = Math.round(cw);
+      sh = Math.round(ch);
+      sx = Math.floor((iw - sw)/2);
+      sy = Math.floor((ih - sh)/2);
+    }
+    ctx.drawImage(img, sx,sy,sw,sh, dx,dy,dw,dh);
+    ctx.imageSmoothingEnabled = false;
+    state.layers[layerIdx].img = ctx.getImageData(0,0,tw,th);
+  }
+
+  function applyUploadToLayers(img){
+    snapshotWorking();
+    ensureAtLeastOneLayer();
+
+    const target = el.uploadTarget.value;
+    if (target === "replaceAll"){
+      state.layers = [ newEmptyLayer("L1") ];
+      state.activeLayer = 0;
+      fitImageToLayer(img, 0, el.fitMode.value);
+    } else if (target === "base"){
+      fitImageToLayer(img, 0, el.fitMode.value);
+      state.activeLayer = 0;
+    } else {
+      fitImageToLayer(img, state.activeLayer, el.fitMode.value);
+    }
+    renameDefaultLayers();
+    renderLayersUI();
+    syncWorkToDisplay();
+    rebuildPaletteFromFlattened();
+  }
+
+  el.file.addEventListener("change", (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      state.originalImage = img;
+      applyUploadToLayers(img);
+      el.workInfo.textContent = `Loaded image: ${img.naturalWidth}×${img.naturalHeight} → ${state.tileSize}×${state.tileSize}`;
+      if (el.autoApplyUpload.value === "on"){
+        pushTilesetUndo();
+        state.tiles[state.selectedSlot] = flattenVisibleToImageData();
+        renderTilesetGrid();
+        setStatus(`Upload applied to layers and saved to slot ${state.selectedSlot+1}.`);
+      } else {
+        setStatus("Upload applied to layers (not saved to tileset).");
+      }
+      requestPreviewDraw();
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = ()=>{ setStatus("Failed to load image."); URL.revokeObjectURL(url); };
+    img.src = url;
+  });
+
+  el.btnFit.addEventListener("click", ()=>{
+    if (!state.originalImage){ setStatus("Upload an image first."); return; }
+    snapshotWorking();
+    ensureAtLeastOneLayer();
+    const target = el.uploadTarget.value;
+    if (target === "replaceAll"){
+      state.layers = [ newEmptyLayer("L1") ];
+      state.activeLayer = 0;
+      fitImageToLayer(state.originalImage, 0, el.fitMode.value);
+    } else if (target === "base"){
+      fitImageToLayer(state.originalImage, 0, el.fitMode.value);
+      state.activeLayer = 0;
+    } else {
+      fitImageToLayer(state.originalImage, state.activeLayer, el.fitMode.value);
+    }
+    renderLayersUI();
+    syncWorkToDisplay();
+    rebuildPaletteFromFlattened();
+    requestPreviewDraw();
+    setStatus("Fit applied to target layer.");
+  });
+
+  // Reset from slot: restore layers from selected slot tile (flattened to L1)
+  el.btnResetWork.addEventListener("click", ()=>{
+    snapshotWorking();
+    ensureAtLeastOneLayer();
+    for (let li=0; li<state.layers.length; li++){
+      state.layers[li].img = new ImageData(state.tileSize,state.tileSize);
+      state.layers[li].visible = true;
+    }
+    if (state.tiles[state.selectedSlot]){
+      state.layers[0].img = cloneImageData(state.tiles[state.selectedSlot]);
+    }
+    state.activeLayer = 0;
+    renderLayersUI();
+    syncWorkToDisplay();
+    rebuildPaletteFromFlattened();
+    requestPreviewDraw();
+    setStatus("Reset layers from selected slot (flattened → L1).");
+  });
+
+  // Apply to slot: flatten visible layers
+  el.btnApplyToSlot.addEventListener("click", ()=>{
+    pushTilesetUndo();
+    state.tiles[state.selectedSlot] = flattenVisibleToImageData();
+    renderTilesetGrid();
+    requestPreviewDraw();
+    setStatus(`Flattened layers saved to slot ${state.selectedSlot+1}.`);
+  });
+
+  // ---------- palette controls ----------
+  el.palColor.addEventListener("input", ()=>{
+    const rgb = hexToRgb(el.palColor.value);
+    snapshotWorking();
+    state.palette[state.selectedSwatch] = rgb;
+    renderPaletteUI();
+    syncPaletteUI();
+    setStatus(`Swatch #${state.selectedSwatch+1} updated.`);
+  });
+
+  el.btnAddSwatch.addEventListener("click", ()=>{
+    snapshotWorking();
+    const rgb = hexToRgb(el.palColor.value);
+    state.palette.push([rgb[0],rgb[1],rgb[2]]);
+    state.selectedSwatch = state.palette.length-1;
+    renderPaletteUI();
+    syncPaletteUI();
+    setStatus("Swatch added.");
+  });
+
+  el.btnAddPicked.addEventListener("click", ()=>{
+    snapshotWorking();
+    state.palette.push([state.picked[0],state.picked[1],state.picked[2]]);
+    state.selectedSwatch = state.palette.length-1;
+    renderPaletteUI();
+    syncPaletteUI();
+    setStatus("Picked color added as swatch.");
+  });
+
+  el.btnDelSwatch.addEventListener("click", ()=>{
+    if (state.palette.length<=2){ setStatus("Keep at least 2 swatches."); return; }
+    snapshotWorking();
+    state.palette.splice(state.selectedSwatch, 1);
+    state.selectedSwatch = clamp(state.selectedSwatch, 0, state.palette.length-1);
+    renderPaletteUI();
+    syncPaletteUI();
+    setStatus("Swatch deleted.");
+  });
+
+  el.btnRebuildPalette.addEventListener("click", ()=>{
+    snapshotWorking();
+    rebuildPaletteFromFlattened();
+    renderPaletteUI();
+    syncPaletteUI();
+  });
+
+  // ---------- recolor / quantize ----------
+  function replaceColorsInImageData(img, fromRgb, toRgb, tol, includeAlpha){
+    const d = img.data;
+    for (let i=0;i<d.length;i+=4){
+      if (!includeAlpha && d[i+3] < 10) continue;
+      const p = [d[i],d[i+1],d[i+2]];
+      if (tol === 0){
+        if (p[0]===fromRgb[0] && p[1]===fromRgb[1] && p[2]===fromRgb[2]){
+          d[i]=toRgb[0]; d[i+1]=toRgb[1]; d[i+2]=toRgb[2];
+        }
+      } else {
+        if (dist3(p, fromRgb) <= tol){
+          d[i]=toRgb[0]; d[i+1]=toRgb[1]; d[i+2]=toRgb[2];
+        }
+      }
+    }
+  }
+
+  function quantizeImageDataToPalette(img, palette, ditherOn=true, dAmt=0.55){
+    const w=img.width, h=img.height;
+    const d = img.data;
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        if (d[i+3] < 10){ d[i+3]=0; continue; }
+        let r=d[i], g=d[i+1], b=d[i+2];
+        if (ditherOn){
+          const t = (BAYER4[y%4][x%4]/16 - 0.5) * (26 * dAmt);
+          r = clamp(r + t, 0, 255);
+          g = clamp(g + t, 0, 255);
+          b = clamp(b + t, 0, 255);
+        }
+        const c = nearestColor(r,g,b, palette);
+        d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
+      }
+    }
+  }
+
+  el.btnReplace.addEventListener("click", ()=>{
+    const fromI = clamp(parseInt(el.repFrom.value,10)||1, 1, state.palette.length)-1;
+    const toI   = clamp(parseInt(el.repTo.value,10)||1, 1, state.palette.length)-1;
+    const tol = parseInt(el.repTol.value,10)||0;
+    const includeAlpha = el.repAlpha.value === "yes";
+    const fromRgb = state.palette[fromI];
+    const toRgb = state.palette[toI];
+
+    snapshotWorking();
+    const idxs = getScopeLayerIndices(el.effectScope.value);
+    for (const li of idxs){
+      const img = cloneImageData(state.layers[li].img);
+      replaceColorsInImageData(img, fromRgb, toRgb, tol, includeAlpha);
+      state.layers[li].img = img;
+    }
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus(`Replaced colors on ${el.effectScope.value} layers.`);
+  });
+
+  el.btnQuantize.addEventListener("click", ()=>{
+    snapshotWorking();
+    const idxs = getScopeLayerIndices(el.effectScope.value);
+    for (const li of idxs){
+      const img = cloneImageData(state.layers[li].img);
+      quantizeImageDataToPalette(img, state.palette, true, 0.55);
+      state.layers[li].img = img;
+    }
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus(`Quantized to palette on ${el.effectScope.value} layers.`);
+  });
+
+  // ---------- seamless + simplify (scope aware) ----------
+  function offsetImageData(img, ox, oy){
+    const w=img.width, h=img.height;
+    const out = new ImageData(w,h);
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const sx = (x - ox + w) % w;
+        const sy = (y - oy + h) % h;
+        const si = (sy*w+sx)*4;
+        const di = (y*w+x)*4;
+        out.data[di]=img.data[si];
+        out.data[di+1]=img.data[si+1];
+        out.data[di+2]=img.data[si+2];
+        out.data[di+3]=img.data[si+3];
+      }
+    }
+    return out;
+  }
+
+  function unsharpInPlace(img, amount){
+    const w=img.width, h=img.height;
+    const src = new Uint8ClampedArray(img.data);
+    const dst = img.data;
+
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        if (src[i+3] < 10) continue;
+
+        let br=0,bg=0,bb=0, cnt=0;
+        for (let yy=-1; yy<=1; yy++){
+          for (let xx=-1; xx<=1; xx++){
+            const nx = clamp(x+xx,0,w-1);
+            const ny = clamp(y+yy,0,h-1);
+            const j=(ny*w+nx)*4;
+            if (src[j+3] < 10) continue;
+            br += src[j]; bg += src[j+1]; bb += src[j+2]; cnt++;
+          }
+        }
+        if (!cnt) continue;
+        br/=cnt; bg/=cnt; bb/=cnt;
+
+        dst[i]   = clamp(Math.round(src[i]   + amount*(src[i]   - br)), 0, 255);
+        dst[i+1] = clamp(Math.round(src[i+1] + amount*(src[i+1] - bg)), 0, 255);
+        dst[i+2] = clamp(Math.round(src[i+2] + amount*(src[i+2] - bb)), 0, 255);
+        dst[i+3] = 255;
+      }
+    }
+  }
+
+  function makeSeamlessSmartControlled(img, margin, guideBlend, edgeKeep, curve, sharpen){
+    const w=img.width, h=img.height;
+
+    const srcC = createCanvas(w,h);
+    srcC.getContext("2d").putImageData(img,0,0);
+
+    const guideC = createCanvas(w,h);
+    const gctx = guideC.getContext("2d");
+    gctx.imageSmoothingEnabled = false;
+    gctx.clearRect(0,0,w,h);
+    gctx.drawImage(srcC,0,0);
+
+    gctx.save(); gctx.globalAlpha=0.5; gctx.translate(w,0); gctx.scale(-1,1); gctx.drawImage(srcC,0,0); gctx.restore();
+    gctx.save(); gctx.globalAlpha=0.5; gctx.translate(0,h); gctx.scale(1,-1); gctx.drawImage(guideC,0,0); gctx.restore();
+
+    const guide = gctx.getImageData(0,0,w,h);
+
+    const halfX = Math.floor(w/2), halfY = Math.floor(h/2);
+    const off = offsetImageData(img, halfX, halfY);
+    const out = new ImageData(w,h);
+
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        const a = off.data[i+3];
+        if (a<10){ out.data[i+3]=0; continue; }
+
+        const dx = Math.abs(x - halfX);
+        const dy = Math.abs(y - halfY);
+        const inBand = (dx <= margin) || (dy <= margin);
+
+        const rO=off.data[i], gO=off.data[i+1], bO=off.data[i+2];
+        if (!inBand){
+          out.data[i]=rO; out.data[i+1]=gO; out.data[i+2]=bO; out.data[i+3]=255;
+          continue;
+        }
+
+        const rG=guide.data[i], gG=guide.data[i+1], bG=guide.data[i+2];
+
+        const dmin = Math.min(dx,dy);
+        let t = 1 - (dmin / margin);
+        t = clamp(t, 0, 1);
+        t = Math.pow(t, curve);
+
+        const dc = Math.sqrt((rO-rG)*(rO-rG)+(gO-gG)*(gO-gG)+(bO-bG)*(bO-bG));
+        const keep = clamp(1 - dc/100, 0, 1);
+        const guided = guideBlend * t * (1 - keep * edgeKeep);
+
+        out.data[i]   = Math.round(rO*(1-guided) + rG*guided);
+        out.data[i+1] = Math.round(gO*(1-guided) + gG*guided);
+        out.data[i+2] = Math.round(bO*(1-guided) + bG*guided);
+        out.data[i+3] = 255;
+      }
+    }
+
+    const back = offsetImageData(out, halfX, halfY);
+    if (sharpen > 0.001) unsharpInPlace(back, sharpen);
+    return back;
+  }
+
+  function applySeamPreset(){
+    const p = el.seamPreset.value;
+    if (p === "crisp"){
+      el.seamMargin.value = 5;
+      el.seamGuide.value = 0.32;
+      el.seamEdgeKeep.value = 0.82;
+      el.seamCurve.value = 1.85;
+      el.seamSharpen.value = 0.35;
+    } else if (p === "balanced"){
+      el.seamMargin.value = 6;
+      el.seamGuide.value = 0.45;
+      el.seamEdgeKeep.value = 0.70;
+      el.seamCurve.value = 1.55;
+      el.seamSharpen.value = 0.22;
+    } else if (p === "strong"){
+      el.seamMargin.value = 8;
+      el.seamGuide.value = 0.62;
+      el.seamEdgeKeep.value = 0.50;
+      el.seamCurve.value = 1.25;
+      el.seamSharpen.value = 0.10;
+    }
+  }
+  el.seamPreset.addEventListener("change", ()=>{ if (el.seamPreset.value !== "custom") applySeamPreset(); });
+
+  el.btnSeamless.addEventListener("click", ()=>{
+    snapshotWorking();
+    const margin = clamp(parseInt(el.seamMargin.value,10) || 6, 1, Math.floor(state.tileSize/2)-1);
+    const guideBlend = parseFloat(el.seamGuide.value);
+    const edgeKeep = parseFloat(el.seamEdgeKeep.value);
+    const curve = parseFloat(el.seamCurve.value);
+    const sharpen = parseFloat(el.seamSharpen.value);
+
+    const idxs = getScopeLayerIndices(el.effectScope.value);
+    for (const li of idxs){
+      state.layers[li].img = makeSeamlessSmartControlled(state.layers[li].img, margin, guideBlend, edgeKeep, curve, sharpen);
+    }
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus(`Seamless applied to ${el.effectScope.value} layers.`);
+  });
+
+  // Simplify (same stable method as before)
+  function bilateralLiteEdgePreserve(img, smooth, edgePreserveOn){
+    const w=img.width, h=img.height;
+    const src = new Uint8ClampedArray(img.data);
+    const out = new ImageData(w,h);
+    const dst = out.data;
+
+    if (smooth <= 0.001){
+      dst.set(src);
+      return out;
+    }
+
+    const rad = 1;
+    const sigmaColor = 16 + smooth*45;
+    const sigmaSpatial = 1.1;
+    const gauss = (x,s)=> Math.exp(-(x*x)/(2*s*s));
+
+    function lumAt(ix){
+      return 0.2126*src[ix] + 0.7152*src[ix+1] + 0.0722*src[ix+2];
+    }
+
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        if (src[i+3]<10){ dst[i+3]=0; continue; }
+        const r0=src[i], g0=src[i+1], b0=src[i+2];
+
+        let edgeFactor = 1;
+        if (edgePreserveOn){
+          const iR = (y*w + clamp(x+1,0,w-1))*4;
+          const iD = (clamp(y+1,0,h-1)*w + x)*4;
+          const dl = Math.abs(lumAt(i) - lumAt(iR)) + Math.abs(lumAt(i) - lumAt(iD));
+          edgeFactor = clamp(1 - dl/70, 0.15, 1);
+        }
+
+        let wr=0,wg=0,wb=0,wsum=0;
+        for (let yy=-rad; yy<=rad; yy++){
+          for (let xx=-rad; xx<=rad; xx++){
+            const nx = clamp(x+xx, 0, w-1);
+            const ny = clamp(y+yy, 0, h-1);
+            const j=(ny*w+nx)*4;
+            if (src[j+3]<10) continue;
+            const r=src[j], g=src[j+1], b=src[j+2];
+
+            const ds = Math.sqrt(xx*xx+yy*yy);
+            const dc = Math.sqrt((r-r0)*(r-r0) + (g-g0)*(g-g0) + (b-b0)*(b-b0));
+            const wgt = gauss(ds, sigmaSpatial) * gauss(dc, sigmaColor / edgeFactor);
+
+            wr += r*wgt; wg += g*wgt; wb += b*wgt; wsum += wgt;
+          }
+        }
+
+        dst[i]=Math.round(wsum?wr/wsum:r0);
+        dst[i+1]=Math.round(wsum?wg/wsum:g0);
+        dst[i+2]=Math.round(wsum?wb/wsum:b0);
+        dst[i+3]=255;
+      }
+    }
+    return out;
+  }
+
+  function kmeansColors(img, k, iters=8){
+    const d = img.data;
+    const pts=[];
+    for (let i=0;i<d.length;i+=4){
+      if (d[i+3] < 10) continue;
+      pts.push([d[i],d[i+1],d[i+2]]);
+    }
+    if (!pts.length) return { centers: [[255,255,255],[0,0,0]] };
+
+    const centers=[];
+    centers.push(pts[Math.floor(Math.random()*pts.length)]);
+    while (centers.length < k){
+      let bestP = pts[0], bestD=-1;
+      for (let s=0;s<64;s++){
+        const p = pts[Math.floor(Math.random()*pts.length)];
+        let minD=1e18;
+        for (const c of centers){
+          const dr=p[0]-c[0], dg=p[1]-c[1], db=p[2]-c[2];
+          const dd=dr*dr+dg*dg+db*db;
+          if (dd<minD) minD=dd;
+        }
+        if (minD>bestD){ bestD=minD; bestP=p; }
+      }
+      centers.push(bestP);
+    }
+
+    for (let it=0; it<iters; it++){
+      const sum = new Array(k).fill(0).map(()=>[0,0,0,0]);
+      for (const p of pts){
+        let bi=0, bd=1e18;
+        for (let i=0;i<k;i++){
+          const c=centers[i];
+          const dr=p[0]-c[0], dg=p[1]-c[1], db=p[2]-c[2];
+          const dd=dr*dr+dg*dg+db*db;
+          if (dd<bd){ bd=dd; bi=i; }
+        }
+        sum[bi][0]+=p[0]; sum[bi][1]+=p[1]; sum[bi][2]+=p[2]; sum[bi][3]+=1;
+      }
+      for (let i=0;i<k;i++){
+        if (!sum[i][3]) continue;
+        centers[i] = [
+          Math.round(sum[i][0]/sum[i][3]),
+          Math.round(sum[i][1]/sum[i][3]),
+          Math.round(sum[i][2]/sum[i][3]),
+        ];
+      }
+    }
+    return { centers };
+  }
+  function nearestCenter(r,g,b, centers){
+    let best=centers[0], bestD=1e18;
+    for (const c of centers){
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const dd=dr*dr+dg*dg+db*db;
+      if (dd<bestD){ bestD=dd; best=c; }
+    }
+    return best;
+  }
+
+  function applySimplifyPreset(){
+    const p = el.simpPreset.value;
+    if (p === "clean"){
+      el.simpColors.value = 10;
+      el.simpSmooth.value = 0.06;
+      el.simpEdge.value = "on";
+      el.simpDither.value = "off";
+      el.simpDitherAmt.value = 0.25;
+    } else if (p === "photo"){
+      el.simpColors.value = 12;
+      el.simpSmooth.value = 0.32;
+      el.simpEdge.value = "on";
+      el.simpDither.value = "on";
+      el.simpDitherAmt.value = 0.65;
+    } else if (p === "soft"){
+      el.simpColors.value = 14;
+      el.simpSmooth.value = 0.45;
+      el.simpEdge.value = "off";
+      el.simpDither.value = "on";
+      el.simpDitherAmt.value = 0.45;
+    } else if (p === "hi"){
+      el.simpColors.value = 8;
+      el.simpSmooth.value = 0.10;
+      el.simpEdge.value = "on";
+      el.simpDither.value = "on";
+      el.simpDitherAmt.value = 0.45;
+    }
+  }
+  el.simpPreset.addEventListener("change", ()=>{ if (el.simpPreset.value !== "custom") applySimplifyPreset(); });
+
+  el.btnSimplify.addEventListener("click", ()=>{
+    snapshotWorking();
+
+    const k = clamp(parseInt(el.simpColors.value,10) || 12, 2, 32);
+    const smooth = parseFloat(el.simpSmooth.value);
+    const edgeOn = el.simpEdge.value === "on";
+    const doDither = el.simpDither.value === "on";
+    const dAmt = parseFloat(el.simpDitherAmt.value);
+
+    const idxs = getScopeLayerIndices(el.effectScope.value);
+    for (const li of idxs){
+      let img = cloneImageData(state.layers[li].img);
+      img = bilateralLiteEdgePreserve(img, smooth, edgeOn);
+      const { centers } = kmeansColors(img, k, 8);
+      const d = img.data;
+      const w=img.width, h=img.height;
+
+      for (let y=0;y<h;y++){
+        for (let x=0;x<w;x++){
+          const i=(y*w+x)*4;
+          if (d[i+3] < 10){ d[i+3]=0; continue; }
+          let r=d[i], g=d[i+1], b=d[i+2];
+          if (doDither){
+            const t = (BAYER4[y%4][x%4]/16 - 0.5) * (26 * dAmt);
+            r = clamp(r + t, 0, 255);
+            g = clamp(g + t, 0, 255);
+            b = clamp(b + t, 0, 255);
+          }
+          const c = nearestCenter(r,g,b, centers);
+          d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
+        }
+      }
+      state.layers[li].img = img;
+    }
+
+    syncWorkToDisplay();
+    rebuildPaletteFromFlattened();
+    requestPreviewDraw();
+    setStatus(`Simplify applied to ${el.effectScope.value} layers.`);
+  });
+
+  // ---------- preview (same crisp + autotile) ----------
+  let previewDirty = true;
+  function requestPreviewDraw(){ previewDirty = true; }
+  function resizePreviewCanvasToFrame(){
+    const size = parseInt(el.previewSize.value,10);
+    const rect = el.previewFrame.getBoundingClientRect();
+    const side = Math.floor(Math.min(size, rect.width - 24, rect.height - 24));
+    const dpr = window.devicePixelRatio || 1;
+    el.bigPreview.style.width = side + "px";
+    el.bigPreview.style.height = side + "px";
+    el.bigPreview.width = Math.floor(side * dpr);
+    el.bigPreview.height = Math.floor(side * dpr);
+    previewDirty = true;
+  }
+  function drawCheckerWorld(ctx, x0,y0,w,h, cell=16){
+    const xStart = Math.floor(x0/cell)*cell;
+    const yStart = Math.floor(y0/cell)*cell;
+    for (let y=yStart; y<y0+h; y+=cell){
+      for (let x=xStart; x<x0+w; x+=cell){
+        const v = ((Math.floor(x/cell)+Math.floor(y/cell))%2) ? 24 : 16;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(x,y,cell,cell);
+      }
+    }
+  }
+  function hash2(x,y,seed){
+    let h = (x*374761393 + y*668265263) ^ (seed*1274126177);
+    h = (h ^ (h >> 13)) >>> 0;
+    h = (h * 1274126177) >>> 0;
+    return (h % 1000000) / 1000000;
+  }
+  function getPreviewTileList(){
+    const ids = [...state.selectedForPreview].filter(i => i>=0 && i<state.capacity);
+    const list = [];
+    for (const i of ids){
+      if (state.tiles[i]) list.push(state.tiles[i]);
+    }
+    if (list.length) return list;
+    // fallback: current flattened
+    return [flattenVisibleToImageData()];
+  }
+  function buildAutoField(cols, rows, seed, fill, scale, smooth){
+    const field = new Uint8Array(cols*rows);
+    const s = Math.max(1, parseInt(scale,10) || 3);
+    for (let y=0;y<rows;y++){
+      for (let x=0;x<cols;x++){
+        const nx = Math.floor(x / s);
+        const ny = Math.floor(y / s);
+        const n = hash2(nx, ny, seed);
+        field[y*cols+x] = (n < fill) ? 1 : 0;
+      }
+    }
+    const iters = Math.floor(clamp(smooth,0,1) * 10 + 1e-6);
+    for (let it=0; it<iters; it++){
+      const copy = new Uint8Array(field);
+      for (let y=0;y<rows;y++){
+        for (let x=0;x<cols;x++){
+          let cnt=0;
+          for (let yy=-1; yy<=1; yy++){
+            for (let xx=-1; xx<=1; xx++){
+              const nx = clamp(x+xx, 0, cols-1);
+              const ny = clamp(y+yy, 0, rows-1);
+              cnt += copy[ny*cols+nx];
+            }
+          }
+          field[y*cols+x] = (cnt >= 5) ? 1 : 0;
+        }
+      }
+    }
+    return field;
+  }
+  function ensureAutoField(){
+    const cols = clamp(parseInt(el.gridCols.value,10) || 14, 2, 128);
+    const rows = clamp(parseInt(el.gridRows.value,10) || 14, 2, 128);
+    const seed = parseInt(el.seed.value,10) || 1;
+    const fill = parseFloat(el.autoFill.value);
+    const scale = parseInt(el.autoScale.value,10) || 3;
+    const smooth = parseFloat(el.autoSmooth.value);
+
+    const needs =
+      !state.autoField ||
+      state.autoFieldCols !== cols ||
+      state.autoFieldRows !== rows ||
+      state.autoFieldSeed !== seed ||
+      state._autoFill !== fill ||
+      state._autoScale !== scale ||
+      state._autoSmooth !== smooth;
+
+    if (needs){
+      state.autoFieldCols = cols;
+      state.autoFieldRows = rows;
+      state.autoFieldSeed = seed;
+      state._autoFill = fill;
+      state._autoScale = scale;
+      state._autoSmooth = smooth;
+      state.autoField = buildAutoField(cols, rows, seed, fill, scale, smooth);
+    }
+  }
+  function mask4(field, cols, rows, x,y){
+    const c = field[y*cols+x];
+    if (!c) return -1;
+    const n = (y>0)       ? field[(y-1)*cols+x] : 0;
+    const e = (x<cols-1)  ? field[y*cols+(x+1)] : 0;
+    const s = (y<rows-1)  ? field[(y+1)*cols+x] : 0;
+    const w = (x>0)       ? field[y*cols+(x-1)] : 0;
+    return (n?1:0) | (e?2:0) | (s?4:0) | (w?8:0);
+  }
+
+  function drawPreview(){
+    if (!previewDirty) return;
+    previewDirty = false;
+
+    const c = el.bigPreview;
+    const ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    const dpr = window.devicePixelRatio || 1;
+
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    const side = c.width / dpr;
+    const ts = state.tileSize;
+    const cols = clamp(parseInt(el.gridCols.value,10) || 14, 2, 128);
+    const rows = clamp(parseInt(el.gridRows.value,10) || 14, 2, 128);
+    const mode = el.previewMode.value;
+    const seed = parseInt(el.seed.value,10) || 1;
+    const lineA = parseFloat(el.gridLine.value);
+
+    const worldW = cols * ts;
+    const worldH = rows * ts;
+
+    const zoom = state.cam.zoom;
+    const viewWWorld = side / zoom;
+    const viewHWorld = side / zoom;
+
+    state.cam.panX = clamp(state.cam.panX, -ts, Math.max(-ts, worldW - viewWWorld + ts));
+    state.cam.panY = clamp(state.cam.panY, -ts, Math.max(-ts, worldH - viewHWorld + ts));
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0,0,side,side); ctx.clip();
+    ctx.scale(zoom, zoom);
+    ctx.translate(-state.cam.panX, -state.cam.panY);
+
+    drawCheckerWorld(ctx, state.cam.panX, state.cam.panY, viewWWorld, viewHWorld, 16);
+
+    const tiles = getPreviewTileList();
+    const tmp = createCanvas(ts, ts);
+    const tctx = tmp.getContext("2d");
+    tctx.imageSmoothingEnabled = false;
+
+    function drawTile(img, x,y){
+      tctx.clearRect(0,0,ts,ts);
+      tctx.putImageData(img,0,0);
+      ctx.drawImage(tmp, x,y);
+    }
+
+    if (mode === "tileset"){
+      const atlasCols = state.cols;
+      for (let i=0;i<state.capacity;i++){
+        if (!state.tiles[i]) continue;
+        const x = (i % atlasCols) * ts;
+        const y = Math.floor(i / atlasCols) * ts;
+        drawTile(state.tiles[i], x,y);
+      }
+      ctx.restore();
+      el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)} • atlas`;
+      return;
+    }
+
+    if (mode === "autotile16"){
+      ensureAutoField();
+      const field = state.autoField;
+
+      if (tiles.length < 16){
+        for (let gy=0; gy<rows; gy++){
+          for (let gx=0; gx<cols; gx++){
+            const filled = field[gy*cols + gx] === 1;
+            if (!filled) continue;
+            drawTile(tiles[(gy*cols + gx) % tiles.length], gx*ts, gy*ts);
+          }
+        }
+      } else {
+        for (let gy=0; gy<rows; gy++){
+          for (let gx=0; gx<cols; gx++){
+            const m = mask4(field, cols, rows, gx, gy);
+            if (m < 0) continue;
+            drawTile(tiles[m], gx*ts, gy*ts);
+          }
+        }
+      }
+
+      if (lineA > 0){
+        ctx.save();
+        ctx.globalAlpha = lineA;
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.lineWidth = 1/zoom;
+        for (let x=1;x<cols;x++){
+          const px = x*ts + 0.5/zoom;
+          ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, worldH); ctx.stroke();
+        }
+        for (let y=1;y<rows;y++){
+          const py = y*ts + 0.5/zoom;
+          ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(worldW, py); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      ctx.restore();
+      el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)} • autotile`;
+      el.autoHint.style.display = "block";
+      return;
+    } else {
+      el.autoHint.style.display = "none";
+    }
+
+    for (let gy=0; gy<rows; gy++){
+      for (let gx=0; gx<cols; gx++){
+        let img = tiles[0];
+        if (mode === "grid"){
+          img = tiles[(gy*cols + gx) % tiles.length];
+        } else if (mode === "random"){
+          img = tiles[Math.floor(hash2(gx,gy,seed) * tiles.length)];
+        } else if (mode === "checker"){
+          const a = tiles[0];
+          const b = tiles[Math.min(1, tiles.length-1)] || a;
+          img = ((gx+gy)%2===0) ? a : b;
+        } else if (mode === "stripesRow"){
+          img = tiles[gy % tiles.length];
+        } else if (mode === "stripesCol"){
+          img = tiles[gx % tiles.length];
+        } else if (mode === "noise"){
+          const n = hash2(Math.floor(gx/2), Math.floor(gy/2), seed);
+          img = tiles[Math.floor(n * tiles.length)];
+        }
+        drawTile(img, gx*ts, gy*ts);
+      }
+    }
+
+    if (lineA > 0){
+      ctx.save();
+      ctx.globalAlpha = lineA;
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 1/zoom;
+      for (let x=1;x<cols;x++){
+        const px = x*ts + 0.5/zoom;
+        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, worldH); ctx.stroke();
+      }
+      for (let y=1;y<rows;y++){
+        const py = y*ts + 0.5/zoom;
+        ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(worldW, py); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    ctx.restore();
+    el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)}`;
+  }
+
+  // preview pan/zoom
+  let panning=false;
+  let panStart = {x:0,y:0, panX:0, panY:0};
+
+  el.bigPreview.addEventListener("mousedown", (e)=>{
+    panning=true;
+    const rect = el.bigPreview.getBoundingClientRect();
+    panStart.x = e.clientX - rect.left;
+    panStart.y = e.clientY - rect.top;
+    panStart.panX = state.cam.panX;
+    panStart.panY = state.cam.panY;
+  });
+  window.addEventListener("mouseup", ()=>{ panning=false; });
+  window.addEventListener("mousemove", (e)=>{
+    if (!panning) return;
+    const rect = el.bigPreview.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const dx = mx - panStart.x;
+    const dy = my - panStart.y;
+    state.cam.panX = panStart.panX - dx / state.cam.zoom;
+    state.cam.panY = panStart.panY - dy / state.cam.zoom;
+    requestPreviewDraw();
+  });
+  el.bigPreview.addEventListener("wheel", (e)=>{
+    e.preventDefault();
+    const rect = el.bigPreview.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const worldX = state.cam.panX + mx / state.cam.zoom;
+    const worldY = state.cam.panY + my / state.cam.zoom;
+
+    const delta = Math.sign(e.deltaY);
+    const factor = (delta > 0) ? 0.9 : 1.111111;
+    state.cam.zoom = clamp(state.cam.zoom * factor, 0.25, 20);
+
+    state.cam.panX = worldX - mx / state.cam.zoom;
+    state.cam.panY = worldY - my / state.cam.zoom;
+    requestPreviewDraw();
+  }, { passive:false });
+
+  el.btnResetView.addEventListener("click", ()=>{
+    state.cam.zoom = 1; state.cam.panX = 0; state.cam.panY = 0;
+    requestPreviewDraw();
+  });
+
+  function invalidateAuto(){ state.autoField = null; requestPreviewDraw(); }
+  el.btnNewAutoMap.addEventListener("click", ()=>{
+    el.seed.value = String((parseInt(el.seed.value,10)||1) + 1);
+    invalidateAuto();
+  });
+
+  // preview controls -> redraw
+  el.previewSize.addEventListener("change", ()=>{ resizePreviewCanvasToFrame(); requestPreviewDraw(); });
+  el.previewMode.addEventListener("change", ()=>{ if (el.previewMode.value==="autotile16") invalidateAuto(); requestPreviewDraw(); });
+  el.gridCols.addEventListener("change", invalidateAuto);
+  el.gridRows.addEventListener("change", invalidateAuto);
+  el.gridLine.addEventListener("input", requestPreviewDraw);
+  el.seed.addEventListener("change", invalidateAuto);
+  el.autoFill.addEventListener("input", invalidateAuto);
+  el.autoScale.addEventListener("change", invalidateAuto);
+  el.autoSmooth.addEventListener("input", invalidateAuto);
+
+  // ---------- exports ----------
+  el.btnExportTile.addEventListener("click", ()=>{
+    const flat = flattenVisibleToImageData();
+    const tmp = createCanvas(state.tileSize,state.tileSize);
+    tmp.getContext("2d").putImageData(flat,0,0);
+    downloadCanvasPNG(tmp, `tile_flat_${state.tileSize}px.png`);
+  });
+
+  el.btnExportSet.addEventListener("click", ()=>{
+    const cols = state.cols;
+    const rows = Math.ceil(state.capacity / cols);
+    const atlas = createCanvas(cols*state.tileSize, rows*state.tileSize);
+    const actx = ctx2d(atlas);
+    actx.clearRect(0,0,atlas.width, atlas.height);
+
+    const tmp = createCanvas(state.tileSize,state.tileSize);
+    const tctx = tmp.getContext("2d");
+    tctx.imageSmoothingEnabled = false;
+
+    for (let i=0;i<state.capacity;i++){
+      const img = state.tiles[i];
+      if (!img) continue;
+      const x=(i%cols)*state.tileSize;
+      const y=Math.floor(i/cols)*state.tileSize;
+      tctx.clearRect(0,0,state.tileSize,state.tileSize);
+      tctx.putImageData(img,0,0);
+      actx.drawImage(tmp, x,y);
+    }
+    downloadCanvasPNG(atlas, `tileset_${state.tileSize}px_${state.capacity}tiles_${cols}cols.png`);
+  });
+
+  // ---------- general wiring ----------
+  el.tileSize.addEventListener("change", ensureTileSize);
+
+  el.capacity.addEventListener("change", ()=>{
+    pushTilesetUndo();
+    rebuildTilesetStorage();
+    renderTilesetGrid();
+    requestPreviewDraw();
+  });
+
+  el.cols.addEventListener("change", ()=>{
+    state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
+    renderTilesetGrid();
+    requestPreviewDraw();
+  });
+
+  el.slot.addEventListener("change", ()=>{
+    const v = clamp(parseInt(el.slot.value,10) || 1, 1, state.capacity);
+    state.selectedSlot = v-1;
+    el.slotLabel.textContent = String(v);
+    renderTilesetGrid();
+    requestPreviewDraw();
+  });
+
+  el.btnUndoTileset.addEventListener("click", undoTileset);
+  el.btnUndoWork.addEventListener("click", undoWorking);
+
+  el.editZoom.addEventListener("input", updateEditorCanvas);
+
+  // tools
+  el.toolBrush.addEventListener("click", ()=>setTool("brush"));
+  el.toolEraser.addEventListener("click", ()=>setTool("eraser"));
+  el.toolPicker.addEventListener("click", ()=>setTool("picker"));
+
+  window.addEventListener("keydown", (e)=>{
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k==="z" && !e.shiftKey){ e.preventDefault(); undoWorking(); }
+    if ((e.ctrlKey || e.metaKey) && k==="z" && e.shiftKey){ e.preventDefault(); undoTileset(); }
+    if (k==="b") setTool("brush");
+    if (k==="e") setTool("eraser");
+    if (k==="i") setTool("picker");
+  });
+
+  // ---------- init ----------
+  function init(){
+    state.tileSize = parseInt(el.tileSize.value,10);
+    state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
+    rebuildTilesetStorage();
+
+    ensureAtLeastOneLayer();
+    renderLayersUI();
+
+    rebuildPaletteFromFlattened();
+    renderPaletteUI();
+    syncPaletteUI();
+
+    updateEditorCanvas();
+    syncWorkToDisplay();
+
+    state.selectedForPreview.add(state.selectedSlot);
+    el.selCount.textContent = String(state.selectedForPreview.size);
+
+    renderTilesetGrid();
+    setTool("brush");
+    applySimplifyPreset();
+    applySeamPreset();
+
+    resizePreviewCanvasToFrame();
+    window.addEventListener("resize", ()=>{ resizePreviewCanvasToFrame(); requestPreviewDraw(); });
+
+    setStatus("Ready.");
+
+    (function tick(){
+      drawPreview();
+      requestAnimationFrame(tick);
+    })();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
