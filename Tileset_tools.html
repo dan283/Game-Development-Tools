@@ -1,0 +1,1717 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TileForge (v4) — Upload/Edit/Seamless/Simplify + Multi-tile Preview (zoom+pan) + Tileset Undo</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0d12; color:#e9eef7; }
+  header { padding: 12px 14px; border-bottom:1px solid #1c2330; background:#0d1220; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .title { font-weight:800; letter-spacing:.2px; }
+  .sub { font-size:12px; opacity:.8; }
+  .pill { font-size:11px; padding:3px 8px; border:1px solid #293246; border-radius:999px; opacity:.85; white-space:nowrap; }
+
+  main { height: calc(100vh - 54px); display:grid; grid-template-columns: 420px 1fr; gap: 12px; padding: 12px; overflow:hidden; }
+  .panel, .stage { border:1px solid #1c2330; border-radius:14px; background:#0f1420; overflow:hidden; min-height:0; }
+  .panel { display:flex; flex-direction:column; }
+  .panel h2 { margin:0; padding:10px 12px; font-size:13px; border-bottom:1px solid #1c2330; background:#0d1220; }
+  .panel .content { padding:10px 12px; display:grid; gap:10px; overflow:auto; min-height:0; }
+  .footer { padding:8px 12px; border-top:1px solid #1c2330; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+
+  label { font-size:12px; opacity:.9; display:grid; gap:4px; }
+  input, select, button {
+    background:#0b0f18; color:#e9eef7; border:1px solid #293246;
+    border-radius:10px; padding:8px 10px; font-size:13px;
+  }
+  input[type="range"] { padding:0; height: 30px; }
+  button { cursor:pointer; font-weight:700; }
+  button:hover { border-color:#3b4a68; }
+  .row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .row3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; }
+  .btnRow { display:flex; gap:8px; flex-wrap:wrap; }
+  .hint { font-size:12px; opacity:.78; line-height:1.35; }
+  .mini { font-size:11px; opacity:.82; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; background:#0b0f18; border:1px solid #293246;
+    border-radius:8px; padding:2px 6px; font-size:11px; }
+
+  .stage { padding: 10px; display:grid; grid-template-columns: 1fr 560px; gap: 12px; overflow:hidden; min-height:0; }
+  .card { border:1px solid #1c2330; border-radius:14px; overflow:hidden; background:#0f1420; min-height:0; display:flex; flex-direction:column; }
+  .cardHead { padding:10px 12px; border-bottom:1px solid #1c2330; background:#0d1220; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .cardBody { padding: 10px 12px; overflow:auto; min-height:0; }
+
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; background: transparent; border:1px solid #1c2330; border-radius:12px; }
+
+  /* Tileset split */
+  .tileSplit { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height:0; height:100%; }
+  .slotList { min-height:0; overflow:auto; border:1px solid #1c2330; border-radius:12px; padding:10px; background:#0b0f18; }
+  .slotTop { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .slotGrid { display:grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .cell {
+    border:1px solid #293246; border-radius:10px; background:#0f1420;
+    padding:6px; cursor:pointer; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    aspect-ratio: 1 / 1;
+    user-select:none;
+  }
+  .cell.sel { outline:2px solid #e9eef7; outline-offset:2px; }
+  .cell.multi { outline:2px solid #7dd3fc; outline-offset:2px; } /* multi-selected */
+  .badge {
+    position:absolute; top:6px; left:6px;
+    font-size:10px; padding:2px 6px;
+    border:1px solid #293246; border-radius:999px;
+    background:#0b0f18; opacity:.88;
+  }
+  .thumb { width:100%; height:100%; border:none; border-radius:8px; }
+
+  /* Preview pane */
+  .previewPane { min-height:0; display:flex; flex-direction:column; gap:10px; }
+  .previewControls { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .previewControls3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; }
+  .previewFrame {
+    border:1px solid #1c2330; border-radius:12px; background:#0b0f18;
+    padding:10px; min-height:0; flex: 1 1 auto;
+    overflow:hidden;
+    position:relative;
+  }
+  .previewFrame canvas { width: 100%; height: 100%; } /* fill frame; backing store set in JS */
+  .overlayHUD {
+    position:absolute; top:12px; left:12px;
+    font-size:11px; padding:6px 8px;
+    border:1px solid #293246; border-radius:10px;
+    background: rgba(11,15,24,.72);
+    backdrop-filter: blur(4px);
+    pointer-events:none;
+  }
+
+  /* Editor */
+  .editorWrap { display:grid; gap:10px; }
+  .swatches { display:grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .swatch { height: 26px; border-radius: 10px; border:1px solid #293246; cursor:pointer; position:relative; }
+  .swatch.sel::after { content:""; position:absolute; inset:4px; border:2px solid #e9eef7; border-radius: 8px; opacity:.9; }
+  .toolRow { display:flex; gap:8px; flex-wrap:wrap; }
+  .toolRow button { flex: 1 1 auto; }
+  .workRow { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items:start; }
+  .workBox { display:grid; gap:6px; }
+
+  details summary { cursor:pointer; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="title">TileForge (v4)</div>
+    <div class="sub">Preview is a real camera (zoom + pan) • multi-select tiles for preview • tileset undo • simplify presets • fit no longer overwrites tileset unless you apply</div>
+  </div>
+  <div class="pill">Single file • Alpha PNG export • 32px default</div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Controls</h2>
+    <div class="content">
+      <label>Upload image (PNG/JPG/WebP)
+        <input id="file" type="file" accept="image/*" />
+      </label>
+
+      <div class="row">
+        <label>Tile Size
+          <select id="tileSize">
+            <option>16</option>
+            <option selected>32</option>
+            <option>48</option>
+            <option>64</option>
+          </select>
+        </label>
+        <label>Fit Mode
+          <select id="fitMode">
+            <option value="contain" selected>Contain</option>
+            <option value="cover">Cover</option>
+            <option value="stretch">Stretch</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Tileset Columns (export)
+          <input id="cols" type="number" min="4" max="64" value="12" />
+        </label>
+        <label>Tileset Capacity
+          <select id="capacity">
+            <option value="64">64</option>
+            <option value="96" selected>96</option>
+            <option value="128">128</option>
+            <option value="192">192</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Selected Slot (for editing)
+          <input id="slot" type="number" min="1" value="1" />
+        </label>
+        <label>Upload auto-applies to slot
+          <select id="autoApplyUpload">
+            <option value="on" selected>On</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="btnRow">
+        <button id="btnFit">Fit To Size (working)</button>
+        <button id="btnApplyToSlot">Apply Working → Slot</button>
+        <button id="btnUndoTileset">Undo Tileset</button>
+      </div>
+
+      <div class="btnRow">
+        <button id="btnSeamless">Make Seamless (smart)</button>
+        <button id="btnResetWork">Reset Working</button>
+        <button id="btnUndoWork">Undo Working</button>
+      </div>
+
+      <details open>
+        <summary class="mini">Simplify</summary>
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <div class="row">
+            <label>Preset
+              <select id="simpPreset">
+                <option value="clean" selected>Clean Pixel (crisp)</option>
+                <option value="photo">Noisy Photo → Pixel</option>
+                <option value="soft">Soft Stylized</option>
+                <option value="hi">High Contrast</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            <label>Max Colors
+              <input id="simpColors" type="number" min="2" max="32" value="12" />
+            </label>
+          </div>
+
+          <div class="row">
+            <label>Pre-smooth (0 = off)
+              <input id="simpSmooth" type="range" min="0" max="1" step="0.01" value="0.18" />
+            </label>
+            <label>Edge Preserve
+              <select id="simpEdge">
+                <option value="on" selected>On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="row">
+            <label>Dither
+              <select id="simpDither">
+                <option value="on" selected>On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+            <label>Dither Amount
+              <input id="simpDitherAmt" type="range" min="0" max="1" step="0.01" value="0.55" />
+            </label>
+          </div>
+
+          <div class="btnRow">
+            <button id="btnSimplify">Simplify Now</button>
+            <button id="btnQuantizeToPalette">Quantize → Editor Palette</button>
+          </div>
+
+          <div class="hint">
+            Simplify avoids “weird color choices” by doing <b>k-means palette clustering</b> + optional ordered dithering (not random).
+            Pre-smooth is small by default to avoid blur.
+          </div>
+        </div>
+      </details>
+
+      <div class="btnRow">
+        <button id="btnExportTile">Export Working Tile PNG</button>
+        <button id="btnExportSet">Export Tileset PNG</button>
+      </div>
+
+      <div class="hint">
+        Hotkeys: <span class="kbd">Ctrl+Z</span> undo working • <span class="kbd">Ctrl+Shift+Z</span> undo tileset • <span class="kbd">B</span> brush • <span class="kbd">E</span> eraser • <span class="kbd">I</span> picker
+      </div>
+    </div>
+
+    <div class="footer">
+      <span class="mini">Preview: drag to pan • wheel to zoom • multi-select tiles (Ctrl / Shift).</span>
+      <span class="mini mono" id="status">Ready.</span>
+    </div>
+  </section>
+
+  <section class="stage">
+    <!-- Tileset -->
+    <div class="card">
+      <div class="cardHead">
+        <strong>Tileset</strong>
+        <span class="mini" id="tilesetInfo"></span>
+      </div>
+
+      <div class="cardBody" style="min-height:0;">
+        <div class="tileSplit">
+          <!-- Slots -->
+          <div class="slotList">
+            <div class="slotTop">
+              <div class="mini">Slots</div>
+              <div class="btnRow" style="margin:0;">
+                <button id="selAll" title="Select all for preview">All</button>
+                <button id="selNone" title="Clear preview selection">None</button>
+                <button id="selInvert" title="Invert preview selection">Invert</button>
+              </div>
+            </div>
+            <div class="hint" style="margin-bottom:8px;">
+              Click = edit slot • Ctrl+Click = toggle preview selection • Shift+Click = range select
+            </div>
+            <div class="slotGrid" id="slotGrid"></div>
+          </div>
+
+          <!-- Preview -->
+          <div class="previewPane">
+            <div class="previewControls">
+              <label>Preview Size
+                <select id="previewSize">
+                  <option value="420">420 px</option>
+                  <option value="560" selected>560 px</option>
+                  <option value="720">720 px</option>
+                  <option value="900">900 px</option>
+                </select>
+              </label>
+              <label>Preview Mode
+                <select id="previewMode">
+                  <option value="grid" selected>Tile Grid</option>
+                  <option value="random">Random (selected tiles)</option>
+                  <option value="checker">Checker (2 tiles)</option>
+                  <option value="stripesRow">Row stripes (cycle)</option>
+                  <option value="stripesCol">Column stripes (cycle)</option>
+                  <option value="noise">Noise regions (useful for ground)</option>
+                  <option value="tileset">Full Tileset Atlas</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="previewControls3">
+              <label>Grid Columns
+                <input id="gridCols" type="number" min="2" max="128" value="14" />
+              </label>
+              <label>Grid Rows
+                <input id="gridRows" type="number" min="2" max="128" value="14" />
+              </label>
+              <label>Grid Lines
+                <input id="gridLine" type="range" min="0" max="1" step="0.01" value="0.15" />
+              </label>
+            </div>
+
+            <div class="previewControls3">
+              <label>Seamless Margin (px)
+                <input id="seamMargin" type="number" min="1" max="16" value="6" />
+              </label>
+              <label>Seed
+                <input id="seed" type="number" value="1" />
+              </label>
+              <label>Reset View
+                <button id="btnResetView">Reset</button>
+              </label>
+            </div>
+
+            <div class="previewFrame" id="previewFrame">
+              <canvas id="bigPreview"></canvas>
+              <div class="overlayHUD mono" id="hud">zoom 1.00x • pan 0,0</div>
+            </div>
+
+            <div class="mini">
+              Selected for preview: <span class="mono" id="selCount">0</span> • Editing slot: <span class="mono" id="slotLabel">1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Working tile + Editor -->
+    <div class="card">
+      <div class="cardHead">
+        <div>
+          <strong>Working Tile + Editor</strong>
+          <div class="mini" id="workInfo">No image loaded — empty tile.</div>
+        </div>
+        <div class="mini">Tool: <span class="mono" id="toolLabel">brush</span></div>
+      </div>
+
+      <div class="cardBody" style="display:grid; gap:10px; min-height:0;">
+        <div class="workRow">
+          <div class="workBox">
+            <div class="mini">Working Tile</div>
+            <canvas id="work" width="32" height="32"></canvas>
+          </div>
+          <div class="workBox">
+            <div class="mini">Editor Zoom / Brush</div>
+            <div class="row">
+              <label>Zoom
+                <input id="editZoom" type="range" min="6" max="24" value="10" />
+              </label>
+              <label>Brush
+                <input id="brush" type="number" min="1" max="8" value="1" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="editorWrap" style="min-height:0;">
+          <div>
+            <div class="mini">Palette (auto)</div>
+            <div class="swatches" id="swatches"></div>
+          </div>
+
+          <div class="toolRow">
+            <button id="toolBrush">Brush (B)</button>
+            <button id="toolEraser">Eraser (E)</button>
+            <button id="toolPicker">Picker (I)</button>
+          </div>
+
+          <canvas id="editor" width="320" height="320"></canvas>
+
+          <div class="hint">
+            Working undo tracks edits + seamless + simplify + fit. Tileset undo tracks slot replacements and apply-to-slot actions.
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span class="mini">Pan preview: drag • Zoom: mouse wheel</span>
+        <span class="mini mono">Alpha preserved</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    // left
+    file: $("file"), tileSize: $("tileSize"), fitMode: $("fitMode"),
+    cols: $("cols"), capacity: $("capacity"), slot: $("slot"),
+    autoApplyUpload: $("autoApplyUpload"),
+    btnFit: $("btnFit"), btnApplyToSlot: $("btnApplyToSlot"),
+    btnUndoTileset: $("btnUndoTileset"),
+    btnSeamless: $("btnSeamless"), seamMargin: $("seamMargin"),
+    btnResetWork: $("btnResetWork"), btnUndoWork: $("btnUndoWork"),
+    btnExportTile: $("btnExportTile"), btnExportSet: $("btnExportSet"),
+    status: $("status"),
+
+    // simplify
+    simpPreset: $("simpPreset"), simpColors: $("simpColors"),
+    simpSmooth: $("simpSmooth"), simpEdge: $("simpEdge"),
+    simpDither: $("simpDither"), simpDitherAmt: $("simpDitherAmt"),
+    btnSimplify: $("btnSimplify"),
+    btnQuantizeToPalette: $("btnQuantizeToPalette"),
+
+    // tileset + preview
+    tilesetInfo: $("tilesetInfo"), slotGrid: $("slotGrid"),
+    selAll: $("selAll"), selNone: $("selNone"), selInvert: $("selInvert"),
+    previewFrame: $("previewFrame"), bigPreview: $("bigPreview"), hud: $("hud"),
+    previewSize: $("previewSize"), previewMode: $("previewMode"),
+    gridCols: $("gridCols"), gridRows: $("gridRows"), gridLine: $("gridLine"),
+    seed: $("seed"), btnResetView: $("btnResetView"),
+    selCount: $("selCount"), slotLabel: $("slotLabel"),
+
+    // working
+    work: $("work"), workInfo: $("workInfo"),
+    editZoom: $("editZoom"), brush: $("brush"),
+    swatches: $("swatches"),
+    toolBrush: $("toolBrush"), toolEraser: $("toolEraser"), toolPicker: $("toolPicker"),
+    toolLabel: $("toolLabel"),
+    editor: $("editor"),
+  };
+
+  // ---------- utils ----------
+  function setStatus(msg){ el.status.textContent = msg; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function createCanvas(w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; return c; }
+  function ctx2d(c){
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    return ctx;
+  }
+  function drawCheckerWorld(ctx, x0,y0,w,h, cell=16){
+    // draw checker in world coords
+    const xStart = Math.floor(x0/cell)*cell;
+    const yStart = Math.floor(y0/cell)*cell;
+    for (let y=yStart; y<y0+h; y+=cell){
+      for (let x=xStart; x<x0+w; x+=cell){
+        const v = ((Math.floor(x/cell)+Math.floor(y/cell))%2) ? 24 : 16;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(x,y,cell,cell);
+      }
+    }
+  }
+  function downloadCanvasPNG(canvas, filename){
+    const a = document.createElement("a");
+    a.download = filename;
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  }
+  function rgbToKey(r,g,b){ return (r<<16) | (g<<8) | b; }
+  function keyToRgb(k){ return [(k>>16)&255, (k>>8)&255, k&255]; }
+
+  function buildPaletteFromImageData(img, maxColors=10){
+    const m = new Map();
+    const d = img.data;
+    for (let i=0;i<d.length;i+=4){
+      const a=d[i+3]; if (a<10) continue;
+      const r = (d[i]   & 0xF8);
+      const g = (d[i+1] & 0xF8);
+      const b = (d[i+2] & 0xF8);
+      const k = rgbToKey(r,g,b);
+      m.set(k, (m.get(k)||0)+1);
+    }
+    const arr = [...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0, maxColors);
+    if (arr.length === 0) return [[255,255,255],[0,0,0]];
+    return arr.map(([k])=> keyToRgb(k));
+  }
+  function nearestColor(r,g,b, palette){
+    let best = palette[0], bestD = 1e18;
+    for (const c of palette){
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const d = dr*dr + dg*dg + db*db;
+      if (d<bestD){ bestD=d; best=c; }
+    }
+    return best;
+  }
+
+  // Ordered dither (Bayer 4x4)
+  const BAYER4 = [
+    [ 0,  8,  2, 10],
+    [12,  4, 14,  6],
+    [ 3, 11,  1,  9],
+    [15,  7, 13,  5],
+  ];
+
+  // ---------- state ----------
+  const state = {
+    tileSize: 32,
+    cols: 12,
+    capacity: 96,
+    selectedSlot: 0,           // editing
+    selectedForPreview: new Set(), // multi-select
+    lastClickedIndex: 0,
+
+    tiles: [], // ImageData|null
+
+    originalImage: null, // last uploaded
+    workCanvas: createCanvas(32,32),
+    workCtx: null,
+
+    palette: [[255,255,255],[0,0,0]],
+    selectedSwatch: 0,
+    tool: "brush",
+
+    workUndo: [],
+    tilesetUndo: [],
+
+    // preview camera in WORLD pixels (world = gridCols*tileSize etc)
+    cam: { zoom: 1, panX: 0, panY: 0 },
+  };
+  state.workCtx = ctx2d(state.workCanvas);
+
+  // ---------- undo helpers ----------
+  function cloneImageData(img){
+    const out = new ImageData(img.width, img.height);
+    out.data.set(img.data);
+    return out;
+  }
+
+  function pushWorkUndo(){
+    const img = state.workCtx.getImageData(0,0,state.tileSize,state.tileSize);
+    state.workUndo.push(cloneImageData(img));
+    if (state.workUndo.length > 60) state.workUndo.shift();
+  }
+  function undoWork(){
+    if (!state.workUndo.length) return;
+    const img = state.workUndo.pop();
+    state.workCtx.putImageData(img,0,0);
+    syncPaletteFromWork();
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus("Undo (working).");
+  }
+
+  function pushTilesetUndo(){
+    // deep copy tiles
+    const snap = {
+      tiles: state.tiles.map(t => t ? cloneImageData(t) : null),
+      selectedSlot: state.selectedSlot,
+      selectedForPreview: new Set([...state.selectedForPreview]),
+    };
+    state.tilesetUndo.push(snap);
+    if (state.tilesetUndo.length > 30) state.tilesetUndo.shift();
+  }
+  function undoTileset(){
+    if (!state.tilesetUndo.length) return;
+    const snap = state.tilesetUndo.pop();
+    state.tiles = snap.tiles.map(t => t ? cloneImageData(t) : null);
+    state.selectedSlot = clamp(snap.selectedSlot, 0, state.capacity-1);
+    state.selectedForPreview = new Set([...snap.selectedForPreview].filter(i => i>=0 && i<state.capacity));
+    el.slot.value = String(state.selectedSlot+1);
+    el.slotLabel.textContent = String(state.selectedSlot+1);
+
+    // load selected slot into work if exists
+    if (state.tiles[state.selectedSlot]){
+      state.workCtx.putImageData(state.tiles[state.selectedSlot], 0,0);
+      state.workUndo = [];
+      syncPaletteFromWork();
+      syncWorkToDisplay();
+    }
+
+    renderTilesetGrid();
+    requestPreviewDraw();
+    setStatus("Undo (tileset).");
+  }
+
+  // ---------- sizing / tileset ----------
+  function rebuildTilesetStorage(){
+    state.capacity = parseInt(el.capacity.value,10);
+    const old = state.tiles;
+    state.tiles = new Array(state.capacity).fill(null);
+    for (let i=0;i<Math.min(old.length, state.tiles.length); i++) state.tiles[i] = old[i];
+    state.selectedSlot = clamp(state.selectedSlot, 0, state.capacity-1);
+    el.slot.min = "1";
+    el.slot.max = String(state.capacity);
+    el.slot.value = String(state.selectedSlot+1);
+    el.slotLabel.textContent = String(state.selectedSlot+1);
+
+    // clamp preview selection
+    state.selectedForPreview = new Set([...state.selectedForPreview].filter(i => i>=0 && i<state.capacity));
+    updateSelCount();
+  }
+
+  function resampleImageDataNearest(img, newSize){
+    if (img.width === newSize && img.height === newSize) return cloneImageData(img);
+    const srcC = createCanvas(img.width, img.height);
+    srcC.getContext("2d").putImageData(img,0,0);
+    const dstC = createCanvas(newSize, newSize);
+    const dctx = dstC.getContext("2d");
+    dctx.imageSmoothingEnabled = false;
+    dctx.clearRect(0,0,newSize,newSize);
+    dctx.drawImage(srcC, 0,0, img.width,img.height, 0,0, newSize,newSize);
+    return dctx.getImageData(0,0,newSize,newSize);
+  }
+
+  function resampleTilesetToSize(newSize){
+    pushTilesetUndo(); // size changes affect tileset (undoable)
+    for (let i=0;i<state.tiles.length;i++){
+      if (!state.tiles[i]) continue;
+      state.tiles[i] = resampleImageDataNearest(state.tiles[i], newSize);
+    }
+  }
+
+  function ensureTileSize(){
+    const newSize = parseInt(el.tileSize.value,10);
+    if (newSize === state.tileSize) return;
+
+    // resample tileset (undoable)
+    resampleTilesetToSize(newSize);
+
+    state.tileSize = newSize;
+
+    // resize working canvas and displays
+    state.workCanvas.width = state.tileSize;
+    state.workCanvas.height = state.tileSize;
+    state.workCtx = ctx2d(state.workCanvas);
+
+    el.work.width = state.tileSize;
+    el.work.height = state.tileSize;
+    el.work.getContext("2d").imageSmoothingEnabled = false;
+
+    updateEditorCanvas();
+
+    // if current slot exists, load it; otherwise clear
+    if (state.tiles[state.selectedSlot]){
+      state.workCtx.putImageData(state.tiles[state.selectedSlot],0,0);
+    } else {
+      state.workCtx.clearRect(0,0,state.tileSize,state.tileSize);
+    }
+    state.workUndo = [];
+    syncPaletteFromWork();
+    syncWorkToDisplay();
+
+    renderTilesetGrid();
+    requestPreviewDraw();
+    setStatus("Tile size updated.");
+  }
+
+  // ---------- slot grid ----------
+  function drawThumb(ctx, tile){
+    const ts = state.tileSize;
+    ctx.imageSmoothingEnabled = false;
+    // checker
+    ctx.clearRect(0,0,ts,ts);
+    for (let y=0;y<ts;y+=Math.max(4, Math.floor(ts/8))){
+      for (let x=0;x<ts;x+=Math.max(4, Math.floor(ts/8))){
+        const cell = Math.max(4, Math.floor(ts/8));
+        const v = ((x/cell + y/cell) % 2) ? 24 : 16;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(x,y,cell,cell);
+      }
+    }
+    if (!tile) return;
+    const tmp = createCanvas(tile.width, tile.height);
+    tmp.getContext("2d").putImageData(tile,0,0);
+    ctx.drawImage(tmp,0,0);
+  }
+
+  function updateSelCount(){
+    el.selCount.textContent = String(state.selectedForPreview.size);
+  }
+
+  function renderTilesetGrid(){
+    el.slotGrid.innerHTML = "";
+    const thumbCols = 6;
+    el.slotGrid.style.gridTemplateColumns = `repeat(${thumbCols}, 1fr)`;
+
+    for (let i=0;i<state.capacity;i++){
+      const cell = document.createElement("div");
+      const isEdit = i===state.selectedSlot;
+      const isMulti = state.selectedForPreview.has(i);
+      cell.className = "cell" + (isEdit ? " sel" : "") + (isMulti ? " multi" : "");
+
+      const badge = document.createElement("div");
+      badge.className = "badge";
+      badge.textContent = String(i+1);
+      cell.appendChild(badge);
+
+      const c = document.createElement("canvas");
+      c.className = "thumb";
+      c.width = state.tileSize;
+      c.height = state.tileSize;
+      drawThumb(c.getContext("2d"), state.tiles[i]);
+      cell.appendChild(c);
+
+      cell.addEventListener("click", (e)=>{
+        const ctrl = e.ctrlKey || e.metaKey;
+        const shift = e.shiftKey;
+
+        if (shift){
+          const a = state.lastClickedIndex ?? i;
+          const lo = Math.min(a,i), hi = Math.max(a,i);
+          for (let k=lo;k<=hi;k++) state.selectedForPreview.add(k);
+          state.lastClickedIndex = i;
+          updateSelCount();
+          renderTilesetGrid();
+          requestPreviewDraw();
+          return;
+        }
+
+        if (ctrl){
+          if (state.selectedForPreview.has(i)) state.selectedForPreview.delete(i);
+          else state.selectedForPreview.add(i);
+          state.lastClickedIndex = i;
+          updateSelCount();
+          renderTilesetGrid();
+          requestPreviewDraw();
+          return;
+        }
+
+        // normal click = change editing slot
+        state.selectedSlot = i;
+        state.lastClickedIndex = i;
+        el.slot.value = String(i+1);
+        el.slotLabel.textContent = String(i+1);
+
+        if (state.tiles[i]){
+          state.workCtx.putImageData(state.tiles[i], 0,0);
+        } else {
+          state.workCtx.clearRect(0,0,state.tileSize,state.tileSize);
+        }
+        state.workUndo = [];
+        syncPaletteFromWork();
+        syncWorkToDisplay();
+
+        renderTilesetGrid();
+        requestPreviewDraw();
+      });
+
+      el.slotGrid.appendChild(cell);
+    }
+
+    state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
+    el.tilesetInfo.textContent = `${state.capacity} slots • ${state.tileSize}px • export cols ${state.cols}`;
+  }
+
+  // selection buttons
+  el.selAll.addEventListener("click", ()=>{
+    state.selectedForPreview = new Set([...Array(state.capacity)].map((_,i)=>i));
+    updateSelCount(); renderTilesetGrid(); requestPreviewDraw();
+  });
+  el.selNone.addEventListener("click", ()=>{
+    state.selectedForPreview.clear();
+    updateSelCount(); renderTilesetGrid(); requestPreviewDraw();
+  });
+  el.selInvert.addEventListener("click", ()=>{
+    const s = new Set();
+    for (let i=0;i<state.capacity;i++){
+      if (!state.selectedForPreview.has(i)) s.add(i);
+    }
+    state.selectedForPreview = s;
+    updateSelCount(); renderTilesetGrid(); requestPreviewDraw();
+  });
+
+  // ---------- working tile / fit / apply ----------
+  function fitImageToCanvas(img, targetCanvas, mode){
+    const ctx = targetCanvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    const tw=targetCanvas.width, th=targetCanvas.height;
+    ctx.clearRect(0,0,tw,th);
+
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+
+    let sx=0, sy=0, sw=iw, sh=ih;
+    let dx=0, dy=0, dw=tw, dh=th;
+
+    if (mode === "stretch"){
+      // no-op
+    } else if (mode === "contain"){
+      const scale = Math.min(tw/iw, th/ih);
+      dw = Math.round(iw*scale);
+      dh = Math.round(ih*scale);
+      dx = Math.floor((tw-dw)/2);
+      dy = Math.floor((th-dh)/2);
+    } else if (mode === "cover"){
+      const scale = Math.max(tw/iw, th/ih);
+      const cw = tw/scale, ch = th/scale;
+      sw = Math.round(cw);
+      sh = Math.round(ch);
+      sx = Math.floor((iw - sw)/2);
+      sy = Math.floor((ih - sh)/2);
+    }
+
+    ctx.drawImage(img, sx,sy,sw,sh, dx,dy,dw,dh);
+    ctx.imageSmoothingEnabled = false;
+  }
+
+  function syncPaletteFromWork(){
+    const img = state.workCtx.getImageData(0,0,state.tileSize,state.tileSize);
+    state.palette = buildPaletteFromImageData(img, 10);
+    state.selectedSwatch = 0;
+    rebuildSwatches();
+  }
+
+  function syncWorkToDisplay(){
+    const ctx = el.work.getContext("2d");
+    const w=state.tileSize, h=state.tileSize;
+    // checker
+    const cell = Math.max(4, Math.floor(w/8));
+    ctx.clearRect(0,0,w,h);
+    for (let y=0;y<h;y+=cell){
+      for (let x=0;x<w;x+=cell){
+        const v = ((x/cell + y/cell) % 2) ? 24 : 16;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(x,y,cell,cell);
+      }
+    }
+    ctx.drawImage(state.workCanvas,0,0);
+    drawEditorFromWork();
+  }
+
+  function fitToWorking(){
+    if (!state.originalImage){ setStatus("Upload an image first."); return; }
+    pushWorkUndo();
+    fitImageToCanvas(state.originalImage, state.workCanvas, el.fitMode.value);
+    syncPaletteFromWork();
+    syncWorkToDisplay();
+    el.workInfo.textContent = `Working fit: ${state.originalImage.naturalWidth}×${state.originalImage.naturalHeight} → ${state.tileSize}×${state.tileSize}`;
+    requestPreviewDraw();
+    setStatus("Fit applied to working tile (tileset unchanged).");
+  }
+
+  function applyWorkingToSlot(){
+    pushTilesetUndo();
+    const img = state.workCtx.getImageData(0,0,state.tileSize,state.tileSize);
+    state.tiles[state.selectedSlot] = cloneImageData(img);
+    renderTilesetGrid();
+    requestPreviewDraw();
+    setStatus(`Applied working tile to slot ${state.selectedSlot+1}.`);
+  }
+
+  function resetWorking(){
+    pushWorkUndo();
+    if (state.tiles[state.selectedSlot]){
+      state.workCtx.putImageData(state.tiles[state.selectedSlot],0,0);
+    } else {
+      state.workCtx.clearRect(0,0,state.tileSize,state.tileSize);
+    }
+    state.workUndo = []; // reset is a "fresh start"
+    syncPaletteFromWork();
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus("Working reset from selected slot.");
+  }
+
+  // upload
+  el.file.addEventListener("change", (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      state.originalImage = img;
+
+      pushWorkUndo();
+      fitImageToCanvas(state.originalImage, state.workCanvas, el.fitMode.value);
+      syncPaletteFromWork();
+      syncWorkToDisplay();
+      el.workInfo.textContent = `Loaded image: ${img.naturalWidth}×${img.naturalHeight} → working ${state.tileSize}×${state.tileSize}`;
+
+      if (el.autoApplyUpload.value === "on"){
+        pushTilesetUndo();
+        const id = state.workCtx.getImageData(0,0,state.tileSize,state.tileSize);
+        state.tiles[state.selectedSlot] = cloneImageData(id);
+        renderTilesetGrid();
+        setStatus(`Upload applied to slot ${state.selectedSlot+1}.`);
+      } else {
+        setStatus("Upload loaded into working (not applied to tileset).");
+      }
+
+      requestPreviewDraw();
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      setStatus("Failed to load image.");
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+    setStatus("Loading image...");
+  });
+
+  // ---------- seamless ----------
+  function offsetImageData(img, ox, oy){
+    const w=img.width, h=img.height;
+    const out = new ImageData(w,h);
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const sx = (x - ox + w) % w;
+        const sy = (y - oy + h) % h;
+        const si = (sy*w+sx)*4;
+        const di = (y*w+x)*4;
+        out.data[di]=img.data[si];
+        out.data[di+1]=img.data[si+1];
+        out.data[di+2]=img.data[si+2];
+        out.data[di+3]=img.data[si+3];
+      }
+    }
+    return out;
+  }
+
+  function makeSeamlessSmart(){
+    pushWorkUndo();
+
+    const w=state.tileSize, h=state.tileSize;
+    const src = state.workCtx.getImageData(0,0,w,h);
+
+    // mirrored guidance
+    const srcC = createCanvas(w,h);
+    srcC.getContext("2d").putImageData(src,0,0);
+    const mirrorC = createCanvas(w,h);
+    const mctx = mirrorC.getContext("2d");
+    mctx.imageSmoothingEnabled = false;
+    mctx.clearRect(0,0,w,h);
+    mctx.globalAlpha = 1;
+    mctx.drawImage(srcC,0,0);
+
+    mctx.save();
+    mctx.globalAlpha = 0.5;
+    mctx.translate(w,0); mctx.scale(-1,1);
+    mctx.drawImage(srcC,0,0);
+    mctx.restore();
+
+    mctx.save();
+    mctx.globalAlpha = 0.5;
+    mctx.translate(0,h); mctx.scale(1,-1);
+    mctx.drawImage(mirrorC,0,0);
+    mctx.restore();
+
+    const guide = mctx.getImageData(0,0,w,h);
+
+    const halfX = Math.floor(w/2), halfY = Math.floor(h/2);
+    const off = offsetImageData(src, halfX, halfY);
+
+    const margin = clamp(parseInt(el.seamMargin.value,10) || 6, 1, Math.floor(w/2)-1);
+    const out = new ImageData(w,h);
+
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        const a = off.data[i+3];
+        if (a<10){ out.data[i+3]=0; continue; }
+
+        const dx = Math.abs(x - halfX);
+        const dy = Math.abs(y - halfY);
+        const inBand = (dx <= margin) || (dy <= margin);
+
+        const rO=off.data[i], gO=off.data[i+1], bO=off.data[i+2];
+        const rG=guide.data[i], gG=guide.data[i+1], bG=guide.data[i+2];
+
+        if (!inBand){
+          out.data[i]=rO; out.data[i+1]=gO; out.data[i+2]=bO; out.data[i+3]=255;
+          continue;
+        }
+
+        const t = Math.min(1, Math.max(0, 1 - (Math.min(dx,dy)/margin)));
+        const dc = Math.sqrt((rO-rG)*(rO-rG)+(gO-gG)*(gO-gG)+(bO-bG)*(bO-bG));
+        const edgeKeep = clamp(1 - dc/90, 0, 1);
+        const wGuide = t * (1 - edgeKeep*0.6);
+
+        out.data[i]   = Math.round(rO*(1-wGuide) + rG*wGuide);
+        out.data[i+1] = Math.round(gO*(1-wGuide) + gG*wGuide);
+        out.data[i+2] = Math.round(bO*(1-wGuide) + bG*wGuide);
+        out.data[i+3] = 255;
+      }
+    }
+
+    const back = offsetImageData(out, halfX, halfY);
+    state.workCtx.putImageData(back,0,0);
+    syncPaletteFromWork();
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus(`Seamless done (margin ${margin}px).`);
+  }
+
+  // ---------- simplify ----------
+  function applySimplifyPreset(){
+    const p = el.simpPreset.value;
+    // set knobs (no action) — avoids “odd blur” by using smaller pre-smooth defaults
+    if (p === "clean"){
+      el.simpColors.value = 10;
+      el.simpSmooth.value = 0.08;
+      el.simpEdge.value = "on";
+      el.simpDither.value = "off";
+      el.simpDitherAmt.value = 0.25;
+    } else if (p === "photo"){
+      el.simpColors.value = 12;
+      el.simpSmooth.value = 0.35;
+      el.simpEdge.value = "on";
+      el.simpDither.value = "on";
+      el.simpDitherAmt.value = 0.65;
+    } else if (p === "soft"){
+      el.simpColors.value = 14;
+      el.simpSmooth.value = 0.45;
+      el.simpEdge.value = "off";
+      el.simpDither.value = "on";
+      el.simpDitherAmt.value = 0.45;
+    } else if (p === "hi"){
+      el.simpColors.value = 8;
+      el.simpSmooth.value = 0.12;
+      el.simpEdge.value = "on";
+      el.simpDither.value = "on";
+      el.simpDitherAmt.value = 0.45;
+    }
+  }
+  el.simpPreset.addEventListener("change", ()=>{
+    if (el.simpPreset.value !== "custom") applySimplifyPreset();
+  });
+
+  function bilateralLiteEdgePreserve(img, smooth, edgePreserveOn){
+    const w=img.width, h=img.height;
+    const src = new Uint8ClampedArray(img.data);
+    const out = new ImageData(w,h);
+    const dst = out.data;
+
+    if (smooth <= 0.001){
+      dst.set(src);
+      return out;
+    }
+
+    const rad = 1;                 // keep tiny to avoid blur
+    const sigmaColor = 16 + smooth*45;
+    const sigmaSpatial = 1.1;
+    const gauss = (x,s)=> Math.exp(-(x*x)/(2*s*s));
+
+    function lumAt(ix){
+      return 0.2126*src[ix] + 0.7152*src[ix+1] + 0.0722*src[ix+2];
+    }
+
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        const a0=src[i+3];
+        if (a0<10){ dst[i+3]=0; continue; }
+        const r0=src[i], g0=src[i+1], b0=src[i+2];
+
+        // local edge estimate (simple): compare with right/down
+        let edgeFactor = 1;
+        if (edgePreserveOn){
+          const iR = (y*w + clamp(x+1,0,w-1))*4;
+          const iD = (clamp(y+1,0,h-1)*w + x)*4;
+          const dl = Math.abs(lumAt(i) - lumAt(iR)) + Math.abs(lumAt(i) - lumAt(iD));
+          // higher dl => less smoothing
+          edgeFactor = clamp(1 - dl/70, 0.15, 1);
+        }
+
+        let wr=0,wg=0,wb=0,wsum=0;
+
+        for (let yy=-rad; yy<=rad; yy++){
+          for (let xx=-rad; xx<=rad; xx++){
+            const nx = clamp(x+xx, 0, w-1);
+            const ny = clamp(y+yy, 0, h-1);
+            const j=(ny*w+nx)*4;
+            const a=src[j+3]; if (a<10) continue;
+            const r=src[j], g=src[j+1], b=src[j+2];
+
+            const ds = Math.sqrt(xx*xx+yy*yy);
+            const dc = Math.sqrt((r-r0)*(r-r0) + (g-g0)*(g-g0) + (b-b0)*(b-b0));
+            const wgt = gauss(ds, sigmaSpatial) * gauss(dc, sigmaColor / edgeFactor);
+
+            wr += r*wgt; wg += g*wgt; wb += b*wgt; wsum += wgt;
+          }
+        }
+
+        const r = (wsum>0) ? (wr/wsum) : r0;
+        const g = (wsum>0) ? (wg/wsum) : g0;
+        const b = (wsum>0) ? (wb/wsum) : b0;
+
+        dst[i]=Math.round(r);
+        dst[i+1]=Math.round(g);
+        dst[i+2]=Math.round(b);
+        dst[i+3]=255;
+      }
+    }
+    return out;
+  }
+
+  function kmeansColors(img, k, iters=8){
+    const d = img.data;
+    const pts=[];
+    for (let i=0;i<d.length;i+=4){
+      if (d[i+3] < 10) continue;
+      pts.push([d[i],d[i+1],d[i+2]]);
+    }
+    if (!pts.length) return { centers: [[255,255,255],[0,0,0]] };
+
+    // init centers spread
+    const centers=[];
+    centers.push(pts[Math.floor(Math.random()*pts.length)]);
+    while (centers.length < k){
+      let bestP = pts[0], bestD=-1;
+      for (let s=0;s<64;s++){
+        const p = pts[Math.floor(Math.random()*pts.length)];
+        let minD=1e18;
+        for (const c of centers){
+          const dr=p[0]-c[0], dg=p[1]-c[1], db=p[2]-c[2];
+          const dd=dr*dr+dg*dg+db*db;
+          if (dd<minD) minD=dd;
+        }
+        if (minD>bestD){ bestD=minD; bestP=p; }
+      }
+      centers.push(bestP);
+    }
+
+    for (let it=0; it<iters; it++){
+      const sum = new Array(k).fill(0).map(()=>[0,0,0,0]);
+      for (const p of pts){
+        let bi=0, bd=1e18;
+        for (let i=0;i<k;i++){
+          const c=centers[i];
+          const dr=p[0]-c[0], dg=p[1]-c[1], db=p[2]-c[2];
+          const dd=dr*dr+dg*dg+db*db;
+          if (dd<bd){ bd=dd; bi=i; }
+        }
+        sum[bi][0]+=p[0]; sum[bi][1]+=p[1]; sum[bi][2]+=p[2]; sum[bi][3]+=1;
+      }
+      for (let i=0;i<k;i++){
+        if (!sum[i][3]) continue;
+        centers[i] = [
+          Math.round(sum[i][0]/sum[i][3]),
+          Math.round(sum[i][1]/sum[i][3]),
+          Math.round(sum[i][2]/sum[i][3]),
+        ];
+      }
+    }
+    return { centers };
+  }
+
+  function nearestCenter(r,g,b, centers){
+    let best=centers[0], bestD=1e18;
+    for (const c of centers){
+      const dr=r-c[0], dg=g-c[1], db=b-c[2];
+      const dd=dr*dr+dg*dg+db*db;
+      if (dd<bestD){ bestD=dd; best=c; }
+    }
+    return best;
+  }
+
+  function simplifyNow(){
+    pushWorkUndo();
+
+    const k = clamp(parseInt(el.simpColors.value,10) || 12, 2, 32);
+    const smooth = parseFloat(el.simpSmooth.value);
+    const edgeOn = el.simpEdge.value === "on";
+    const doDither = el.simpDither.value === "on";
+    const dAmt = parseFloat(el.simpDitherAmt.value);
+
+    const w=state.tileSize, h=state.tileSize;
+    let img = state.workCtx.getImageData(0,0,w,h);
+
+    // tiny pre-smooth (edge-preserving), avoids the “odd blurring” you saw
+    img = bilateralLiteEdgePreserve(img, smooth, edgeOn);
+
+    // palette clustering
+    const { centers } = kmeansColors(img, k, 8);
+
+    // map
+    const d = img.data;
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        if (d[i+3] < 10){ d[i+3]=0; continue; }
+        let r=d[i], g=d[i+1], b=d[i+2];
+
+        if (doDither){
+          const t = (BAYER4[y%4][x%4]/16 - 0.5) * (26 * dAmt);
+          r = clamp(r + t, 0, 255);
+          g = clamp(g + t, 0, 255);
+          b = clamp(b + t, 0, 255);
+        }
+
+        const c = nearestCenter(r,g,b, centers);
+        d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
+      }
+    }
+
+    state.workCtx.putImageData(img,0,0);
+    syncPaletteFromWork();
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus(`Simplified (k=${k}, smooth=${smooth.toFixed(2)}, dither=${doDither?"on":"off"}).`);
+  }
+
+  // ---------- editor ----------
+  function rebuildSwatches(){
+    el.swatches.innerHTML = "";
+    state.palette.forEach((c, idx)=>{
+      const d = document.createElement("div");
+      d.className = "swatch" + (idx===state.selectedSwatch ? " sel" : "");
+      d.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+      d.title = `rgb(${c[0]},${c[1]},${c[2]})`;
+      d.addEventListener("click", ()=>{
+        state.selectedSwatch = idx;
+        rebuildSwatches();
+      });
+      el.swatches.appendChild(d);
+    });
+  }
+  function setTool(t){
+    state.tool = t;
+    el.toolLabel.textContent = t;
+    const on="#e9eef7", off="#293246";
+    el.toolBrush.style.borderColor = (t==="brush") ? on : off;
+    el.toolEraser.style.borderColor = (t==="eraser") ? on : off;
+    el.toolPicker.style.borderColor = (t==="picker") ? on : off;
+  }
+
+  function updateEditorCanvas(){
+    const z = parseInt(el.editZoom.value,10);
+    el.editor.width = state.tileSize * z;
+    el.editor.height = state.tileSize * z;
+    drawEditorFromWork();
+  }
+
+  function drawEditorFromWork(){
+    const z = parseInt(el.editZoom.value,10);
+    const ctx = el.editor.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+
+    // checker background
+    const cell = Math.max(8, Math.floor(z*0.8));
+    ctx.clearRect(0,0,el.editor.width, el.editor.height);
+    for (let y=0;y<el.editor.height;y+=cell){
+      for (let x=0;x<el.editor.width;x+=cell){
+        const v = ((x/cell + y/cell) % 2) ? 24 : 16;
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(x,y,cell,cell);
+      }
+    }
+
+    // tile
+    const tmp = createCanvas(state.tileSize, state.tileSize);
+    tmp.getContext("2d").drawImage(state.workCanvas,0,0);
+    ctx.drawImage(tmp, 0,0, state.tileSize,state.tileSize, 0,0, state.tileSize*z, state.tileSize*z);
+
+    // grid
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
+    for (let x=0;x<=state.tileSize;x++){
+      ctx.beginPath(); ctx.moveTo(x*z + 0.5, 0); ctx.lineTo(x*z + 0.5, state.tileSize*z); ctx.stroke();
+    }
+    for (let y=0;y<=state.tileSize;y++){
+      ctx.beginPath(); ctx.moveTo(0, y*z + 0.5); ctx.lineTo(state.tileSize*z, y*z + 0.5); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function editorPosFromMouse(ev){
+    const rect = el.editor.getBoundingClientRect();
+    const scaleX = el.editor.width / rect.width;
+    const scaleY = el.editor.height / rect.height;
+    const mx = (ev.clientX - rect.left) * scaleX;
+    const my = (ev.clientY - rect.top) * scaleY;
+    const z = parseInt(el.editZoom.value,10);
+    return { x: Math.floor(mx / z), y: Math.floor(my / z) };
+  }
+
+  function applyStroke(px,py){
+    const w=state.tileSize, h=state.tileSize;
+    if (px<0||py<0||px>=w||py>=h) return;
+
+    const bsz = clamp(parseInt(el.brush.value,10) || 1, 1, 8);
+    const half = Math.floor(bsz/2);
+
+    const img = state.workCtx.getImageData(0,0,w,h);
+    const d = img.data;
+    const idxOf = (x,y)=> (y*w+x)*4;
+
+    if (state.tool === "picker"){
+      const i = idxOf(px,py);
+      if (d[i+3] < 10) return;
+      const picked = [d[i],d[i+1],d[i+2]];
+      let best=0, bestD=1e18;
+      for (let s=0;s<state.palette.length;s++){
+        const c=state.palette[s];
+        const dr=picked[0]-c[0], dg=picked[1]-c[1], db=picked[2]-c[2];
+        const dd=dr*dr+dg*dg+db*db;
+        if (dd<bestD){ bestD=dd; best=s; }
+      }
+      state.selectedSwatch = best;
+      rebuildSwatches();
+      setStatus("Picked color.");
+      return;
+    }
+
+    const col = state.palette[state.selectedSwatch] || [255,255,255];
+
+    for (let yy=py-half; yy<py-half+bsz; yy++){
+      for (let xx=px-half; xx<px-half+bsz; xx++){
+        if (xx<0||yy<0||xx>=w||yy>=h) continue;
+        const i = idxOf(xx,yy);
+        if (state.tool === "eraser"){
+          d[i]=0; d[i+1]=0; d[i+2]=0; d[i+3]=0;
+        } else {
+          d[i]=col[0]; d[i+1]=col[1]; d[i+2]=col[2]; d[i+3]=255;
+        }
+      }
+    }
+
+    state.workCtx.putImageData(img,0,0);
+    syncWorkToDisplay();
+    requestPreviewDraw();
+  }
+
+  function quantizeToEditorPalette(){
+    pushWorkUndo();
+    const w=state.tileSize, h=state.tileSize;
+    const img = state.workCtx.getImageData(0,0,w,h);
+    const d = img.data;
+    for (let i=0;i<d.length;i+=4){
+      if (d[i+3] < 10) { d[i+3]=0; continue; }
+      const c = nearestColor(d[i],d[i+1],d[i+2], state.palette);
+      d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
+    }
+    state.workCtx.putImageData(img,0,0);
+    syncWorkToDisplay();
+    requestPreviewDraw();
+    setStatus("Quantized to editor palette.");
+  }
+
+  let editorDown=false;
+  el.editor.addEventListener("mousedown", (e)=>{
+    pushWorkUndo();
+    editorDown=true;
+    const p=editorPosFromMouse(e);
+    applyStroke(p.x,p.y);
+  });
+  window.addEventListener("mouseup", ()=>{ editorDown=false; });
+  el.editor.addEventListener("mousemove", (e)=>{
+    if (!editorDown) return;
+    const p=editorPosFromMouse(e);
+    applyStroke(p.x,p.y);
+  });
+
+  // ---------- preview camera + draw ----------
+  let previewDirty = true;
+  function requestPreviewDraw(){ previewDirty = true; }
+
+  function resizePreviewCanvasToFrame(){
+    const size = parseInt(el.previewSize.value,10);
+    const rect = el.previewFrame.getBoundingClientRect();
+
+    // keep square preview inside frame, based on selected size, but not larger than available
+    const side = Math.floor(Math.min(size, rect.width - 4, rect.height - 4));
+    const dpr = window.devicePixelRatio || 1;
+
+    el.bigPreview.style.width = side + "px";
+    el.bigPreview.style.height = side + "px";
+    el.bigPreview.width = Math.floor(side * dpr);
+    el.bigPreview.height = Math.floor(side * dpr);
+
+    previewDirty = true;
+  }
+
+  function hash2(x,y,seed){
+    // deterministic 0..1
+    let h = (x*374761393 + y*668265263) ^ (seed*1274126177);
+    h = (h ^ (h >> 13)) >>> 0;
+    h = (h * 1274126177) >>> 0;
+    return (h % 1000000) / 1000000;
+  }
+
+  function getPreviewTileList(){
+    // if none selected for preview, fall back to selectedSlot (if present) or working tile
+    const ids = [...state.selectedForPreview].filter(i => i>=0 && i<state.capacity);
+    const list = [];
+    for (const i of ids){
+      if (state.tiles[i]) list.push(state.tiles[i]);
+    }
+    if (list.length) return list;
+
+    if (state.tiles[state.selectedSlot]) return [state.tiles[state.selectedSlot]];
+    // fallback: working tile
+    return [state.workCtx.getImageData(0,0,state.tileSize,state.tileSize)];
+  }
+
+  function drawPreview(){
+    if (!previewDirty) return;
+    previewDirty = false;
+
+    const c = el.bigPreview;
+    const ctx = c.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+
+    // clear in device pixels
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,c.width,c.height);
+
+    // we draw in CSS pixel space for camera convenience
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    const side = c.width / dpr;
+    const ts = state.tileSize;
+
+    const cols = clamp(parseInt(el.gridCols.value,10) || 14, 2, 128);
+    const rows = clamp(parseInt(el.gridRows.value,10) || 14, 2, 128);
+    const mode = el.previewMode.value;
+    const seed = parseInt(el.seed.value,10) || 1;
+    const lineA = parseFloat(el.gridLine.value);
+
+    // world size in world pixels (tile pixels)
+    const worldW = cols * ts;
+    const worldH = rows * ts;
+
+    // camera transform: world -> view
+    const zoom = state.cam.zoom;
+    const panX = state.cam.panX;
+    const panY = state.cam.panY;
+
+    // clamp pan to world bounds (leave a little slack)
+    const viewWWorld = side / zoom;
+    const viewHWorld = side / zoom;
+    state.cam.panX = clamp(panX, -ts, Math.max(-ts, worldW - viewWWorld + ts));
+    state.cam.panY = clamp(panY, -ts, Math.max(-ts, worldH - viewHWorld + ts));
+
+    // set world->view transform
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0,0,side,side);
+    ctx.clip();
+
+    ctx.translate(0,0);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-state.cam.panX, -state.cam.panY);
+
+    // background checker in world coords
+    drawCheckerWorld(ctx, state.cam.panX, state.cam.panY, viewWWorld, viewHWorld, 16);
+
+    // tiles
+    const tiles = getPreviewTileList();
+    const tmp = createCanvas(ts, ts);
+    const tctx = tmp.getContext("2d");
+    tctx.imageSmoothingEnabled = false;
+
+    function drawTile(img, x,y){
+      tctx.clearRect(0,0,ts,ts);
+      tctx.putImageData(img,0,0);
+      ctx.drawImage(tmp, x,y);
+    }
+
+    // mode logic
+    if (mode === "tileset"){
+      // render atlas in world space (ignore gridCols/Rows, but keep camera)
+      const atlasCols = state.cols;
+      const atlasRows = Math.ceil(state.capacity / atlasCols);
+      const atlasW = atlasCols * ts;
+      const atlasH = atlasRows * ts;
+
+      // re-draw checker for atlas size region
+      drawCheckerWorld(ctx, state.cam.panX, state.cam.panY, viewWWorld, viewHWorld, 16);
+
+      for (let i=0;i<state.capacity;i++){
+        if (!state.tiles[i]) continue;
+        const x = (i % atlasCols) * ts;
+        const y = Math.floor(i / atlasCols) * ts;
+        drawTile(state.tiles[i], x,y);
+      }
+    } else {
+      for (let gy=0; gy<rows; gy++){
+        for (let gx=0; gx<cols; gx++){
+          let img = tiles[0];
+          if (mode === "grid"){
+            img = tiles[(gy*cols + gx) % tiles.length];
+          } else if (mode === "random"){
+            img = tiles[Math.floor(hash2(gx,gy,seed) * tiles.length)];
+          } else if (mode === "checker"){
+            const a = tiles[0];
+            const b = tiles[Math.min(1, tiles.length-1)] || a;
+            img = ((gx+gy)%2===0) ? a : b;
+          } else if (mode === "stripesRow"){
+            img = tiles[gy % tiles.length];
+          } else if (mode === "stripesCol"){
+            img = tiles[gx % tiles.length];
+          } else if (mode === "noise"){
+            // “regions” using coarse noise, useful for ground blends
+            const n = hash2(Math.floor(gx/2), Math.floor(gy/2), seed);
+            img = tiles[Math.floor(n * tiles.length)];
+          }
+          drawTile(img, gx*ts, gy*ts);
+        }
+      }
+
+      // grid lines (world coords)
+      if (lineA > 0){
+        ctx.save();
+        ctx.globalAlpha = lineA;
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.lineWidth = 1/zoom; // keep 1px-ish in view
+        for (let x=1;x<cols;x++){
+          const px = x*ts + 0.5/zoom;
+          ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, worldH); ctx.stroke();
+        }
+        for (let y=1;y<rows;y++){
+          const py = y*ts + 0.5/zoom;
+          ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(worldW, py); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    ctx.restore();
+
+    el.hud.textContent = `zoom ${state.cam.zoom.toFixed(2)}x • pan ${Math.round(state.cam.panX)},${Math.round(state.cam.panY)} • tiles ${tiles.length}`;
+  }
+
+  // zoom/pan interactions
+  let panning=false;
+  let panStart = {x:0,y:0, panX:0, panY:0};
+
+  el.bigPreview.addEventListener("mousedown", (e)=>{
+    panning=true;
+    const rect = el.bigPreview.getBoundingClientRect();
+    panStart.x = e.clientX - rect.left;
+    panStart.y = e.clientY - rect.top;
+    panStart.panX = state.cam.panX;
+    panStart.panY = state.cam.panY;
+  });
+  window.addEventListener("mouseup", ()=>{ panning=false; });
+  window.addEventListener("mousemove", (e)=>{
+    if (!panning) return;
+    const rect = el.bigPreview.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const dx = mx - panStart.x;
+    const dy = my - panStart.y;
+    // convert view px -> world px
+    state.cam.panX = panStart.panX - dx / state.cam.zoom;
+    state.cam.panY = panStart.panY - dy / state.cam.zoom;
+    requestPreviewDraw();
+  });
+
+  el.bigPreview.addEventListener("wheel", (e)=>{
+    e.preventDefault();
+    const rect = el.bigPreview.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const side = rect.width;
+    const viewX = mx;
+    const viewY = my;
+
+    // world coordinate under cursor before zoom
+    const worldX = state.cam.panX + viewX / state.cam.zoom;
+    const worldY = state.cam.panY + viewY / state.cam.zoom;
+
+    const delta = Math.sign(e.deltaY);
+    const factor = (delta > 0) ? 0.9 : 1.111111;
+    state.cam.zoom = clamp(state.cam.zoom * factor, 0.25, 20);
+
+    // keep world point under cursor stable
+    state.cam.panX = worldX - viewX / state.cam.zoom;
+    state.cam.panY = worldY - viewY / state.cam.zoom;
+
+    requestPreviewDraw();
+  }, { passive:false });
+
+  el.btnResetView.addEventListener("click", ()=>{
+    state.cam.zoom = 1;
+    state.cam.panX = 0;
+    state.cam.panY = 0;
+    requestPreviewDraw();
+  });
+
+  // draw loop
+  function tick(){
+    drawPreview();
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- exports ----------
+  function exportWorkingTile(){
+    const tmp = createCanvas(state.tileSize,state.tileSize);
+    tmp.getContext("2d").drawImage(state.workCanvas,0,0);
+    downloadCanvasPNG(tmp, `tile_${state.tileSize}px.png`);
+  }
+
+  function exportTileset(){
+    const cols = state.cols;
+    const rows = Math.ceil(state.capacity / cols);
+    const atlas = createCanvas(cols*state.tileSize, rows*state.tileSize);
+    const actx = ctx2d(atlas);
+    actx.clearRect(0,0,atlas.width, atlas.height);
+
+    const tmp = createCanvas(state.tileSize,state.tileSize);
+    const tctx = tmp.getContext("2d");
+    tctx.imageSmoothingEnabled = false;
+
+    for (let i=0;i<state.capacity;i++){
+      const img = state.tiles[i];
+      if (!img) continue;
+      const x=(i%cols)*state.tileSize;
+      const y=Math.floor(i/cols)*state.tileSize;
+      tctx.clearRect(0,0,state.tileSize,state.tileSize);
+      tctx.putImageData(img,0,0);
+      actx.drawImage(tmp, x,y);
+    }
+    downloadCanvasPNG(atlas, `tileset_${state.tileSize}px_${state.capacity}tiles_${cols}cols.png`);
+  }
+
+  // ---------- wiring ----------
+  el.tileSize.addEventListener("change", ensureTileSize);
+
+  el.capacity.addEventListener("change", ()=>{
+    pushTilesetUndo();
+    rebuildTilesetStorage();
+    renderTilesetGrid();
+    requestPreviewDraw();
+  });
+
+  el.cols.addEventListener("change", ()=>{
+    state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
+    renderTilesetGrid();
+    requestPreviewDraw();
+  });
+
+  el.slot.addEventListener("change", ()=>{
+    const v = clamp(parseInt(el.slot.value,10) || 1, 1, state.capacity);
+    state.selectedSlot = v-1;
+    el.slotLabel.textContent = String(v);
+
+    if (state.tiles[state.selectedSlot]){
+      state.workCtx.putImageData(state.tiles[state.selectedSlot],0,0);
+    } else {
+      state.workCtx.clearRect(0,0,state.tileSize,state.tileSize);
+    }
+    state.workUndo = [];
+    syncPaletteFromWork();
+    syncWorkToDisplay();
+
+    renderTilesetGrid();
+    requestPreviewDraw();
+  });
+
+  el.previewSize.addEventListener("change", ()=>{
+    resizePreviewCanvasToFrame();
+    requestPreviewDraw();
+  });
+  el.previewMode.addEventListener("change", requestPreviewDraw);
+  el.gridCols.addEventListener("change", requestPreviewDraw);
+  el.gridRows.addEventListener("change", requestPreviewDraw);
+  el.gridLine.addEventListener("input", requestPreviewDraw);
+  el.seed.addEventListener("change", requestPreviewDraw);
+
+  el.editZoom.addEventListener("input", updateEditorCanvas);
+
+  el.btnFit.addEventListener("click", fitToWorking);
+  el.btnApplyToSlot.addEventListener("click", applyWorkingToSlot);
+  el.btnUndoTileset.addEventListener("click", undoTileset);
+
+  el.btnSeamless.addEventListener("click", makeSeamlessSmart);
+  el.btnResetWork.addEventListener("click", resetWorking);
+  el.btnUndoWork.addEventListener("click", undoWork);
+
+  el.btnSimplify.addEventListener("click", simplifyNow);
+  el.btnQuantizeToPalette.addEventListener("click", quantizeToEditorPalette);
+
+  el.btnExportTile.addEventListener("click", exportWorkingTile);
+  el.btnExportSet.addEventListener("click", exportTileset);
+
+  el.toolBrush.addEventListener("click", ()=>setTool("brush"));
+  el.toolEraser.addEventListener("click", ()=>setTool("eraser"));
+  el.toolPicker.addEventListener("click", ()=>setTool("picker"));
+
+  window.addEventListener("keydown", (e)=>{
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k==="z" && !e.shiftKey){ e.preventDefault(); undoWork(); }
+    if ((e.ctrlKey || e.metaKey) && k==="z" && e.shiftKey){ e.preventDefault(); undoTileset(); }
+    if (k==="b") setTool("brush");
+    if (k==="e") setTool("eraser");
+    if (k==="i") setTool("picker");
+  });
+
+  // ---------- init ----------
+  function init(){
+    state.tileSize = parseInt(el.tileSize.value,10);
+    state.cols = clamp(parseInt(el.cols.value,10) || 12, 4, 64);
+    rebuildTilesetStorage();
+
+    state.workCanvas = createCanvas(state.tileSize,state.tileSize);
+    state.workCtx = ctx2d(state.workCanvas);
+    state.workCtx.clearRect(0,0,state.tileSize,state.tileSize);
+
+    syncPaletteFromWork();
+    updateEditorCanvas();
+    syncWorkToDisplay();
+
+    // preview defaults: include selected slot in preview selection
+    state.selectedForPreview.add(state.selectedSlot);
+    updateSelCount();
+
+    renderTilesetGrid();
+    setTool("brush");
+    setStatus("Ready.");
+
+    // preview canvas fit to frame
+    resizePreviewCanvasToFrame();
+    window.addEventListener("resize", ()=>{
+      resizePreviewCanvasToFrame();
+      requestPreviewDraw();
+    });
+
+    applySimplifyPreset();
+    tick();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
