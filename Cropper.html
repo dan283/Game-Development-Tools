@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Selection Crop Exporter (Zoom+Pan+Nudge+Undo)</title>
+  <title>Selection Crop Exporter (Zoom+Pan+Nudge+Undo+Duplicate)</title>
   <style>
     :root { color-scheme: dark; --thumb: 128px; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0f1115; color:#e7e7e7; }
@@ -53,6 +53,7 @@
       <button id="undoLast" disabled>Undo last add</button>
       <button id="clear" disabled>Clear all</button>
       <button id="exportAll" disabled>Export all PNGs</button>
+      <span class="pill">Duplicate: <span class="kbd">Ctrl/Cmd</span>+<span class="kbd">D</span></span>
       <span class="pill">Zoom: wheel / <span class="kbd">+</span> <span class="kbd">-</span> / reset <span class="kbd">0</span></span>
       <span class="pill">Pan: hold <span class="kbd">Space</span> + drag (or middle mouse)</span>
       <span class="pill">Move: arrows (Shift=10)</span>
@@ -99,15 +100,12 @@
     const thumbSize = document.getElementById('thumbSize');
     const thumbVal = document.getElementById('thumbVal');
 
-    // Image + selections (image-space pixels)
     let img = null;
     let selections = []; // {x,y,w,h,id}
     let selectedId = null;
 
-    // View transform (CSS px)
     const view = { zoom: 1, panX: 0, panY: 0, minZoom: 0.05, maxZoom: 64 };
 
-    // Interaction state
     let mode = "idle"; // idle | draw | move | resize | pan
     let pointerDownId = null;
     let dragStartImg = null;
@@ -116,20 +114,16 @@
     let moveOffsetImg = null;
     let resizeInfo = null;
 
-    // Keys
     let shiftHeld = false;
     let altHeld = false;
     let spaceHeld = false;
 
-    // Undo snapshot stack (full state)
     const undoStack = [];
     const UNDO_LIMIT = 200;
     let actionSnapshotTaken = false;
 
-    // no smoothing
     ctx.imageSmoothingEnabled = false;
 
-    // ---- utilities ----
     const dpr = () => window.devicePixelRatio || 1;
     const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
@@ -220,22 +214,16 @@
       if (!img) return;
       sel.x = clamp(sel.x, 0, img.naturalWidth);
       sel.y = clamp(sel.y, 0, img.naturalHeight);
-      sel.w = clamp(sel.w, 0, img.naturalWidth - sel.x);
-      sel.h = clamp(sel.h, 0, img.naturalHeight - sel.y);
-      sel.x = Math.round(sel.x); sel.y = Math.round(sel.y);
-      sel.w = Math.round(sel.w); sel.h = Math.round(sel.h);
-      // prevent 0-sized selections during edits
-      if (sel.w < 1) sel.w = 1;
-      if (sel.h < 1) sel.h = 1;
       sel.w = clamp(sel.w, 1, img.naturalWidth - sel.x);
       sel.h = clamp(sel.h, 1, img.naturalHeight - sel.y);
+      sel.x = Math.round(sel.x); sel.y = Math.round(sel.y);
+      sel.w = Math.round(sel.w); sel.h = Math.round(sel.h);
     }
 
     function pointInRect(p, r) {
       return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
     }
 
-    // ---- precise resize hit-testing ----
     const HANDLE = { NW:"nw", N:"n", NE:"ne", W:"w", E:"e", SW:"sw", S:"s", SE:"se" };
 
     function handlePoints(sel) {
@@ -254,44 +242,37 @@
     }
 
     function hitTestHandleOrEdge(pImg, sel) {
-      // tolerance in SCREEN px (stable across zoom)
-      const tolPx = 10; // handle/edge pickup radius
+      const tolPx = 10;
       const tolImg = tolPx / view.zoom;
 
-      // 1) handles (closest wins)
-      let best = null;
-      let bestD2 = Infinity;
+      // handles
+      let best=null, bestD2=Infinity;
       for (const hp of handlePoints(sel)) {
-        const dx = pImg.x - hp.x;
-        const dy = pImg.y - hp.y;
-        const d2 = dx*dx + dy*dy;
-        if (d2 < bestD2) { bestD2 = d2; best = hp.h; }
+        const dx=pImg.x-hp.x, dy=pImg.y-hp.y;
+        const d2=dx*dx+dy*dy;
+        if (d2 < bestD2) { bestD2=d2; best=hp.h; }
       }
       if (bestD2 <= tolImg*tolImg) return best;
 
-      // 2) near edges (prefer resize over move)
       if (!pointInRect(pImg, sel)) return null;
 
-      const dl = Math.abs(pImg.x - sel.x);
-      const dr = Math.abs((sel.x + sel.w) - pImg.x);
-      const dt = Math.abs(pImg.y - sel.y);
-      const db = Math.abs((sel.y + sel.h) - pImg.y);
+      const dl=Math.abs(pImg.x - sel.x);
+      const dr=Math.abs((sel.x+sel.w) - pImg.x);
+      const dt=Math.abs(pImg.y - sel.y);
+      const db=Math.abs((sel.y+sel.h) - pImg.y);
 
-      const nearL = dl <= tolImg, nearR = dr <= tolImg, nearT = dt <= tolImg, nearB = db <= tolImg;
+      const nearL=dl<=tolImg, nearR=dr<=tolImg, nearT=dt<=tolImg, nearB=db<=tolImg;
 
-      if ((nearL || nearR || nearT || nearB)) {
-        // corners first
+      if (nearL||nearR||nearT||nearB) {
         if (nearL && nearT) return HANDLE.NW;
         if (nearR && nearT) return HANDLE.NE;
         if (nearL && nearB) return HANDLE.SW;
         if (nearR && nearB) return HANDLE.SE;
-        // edges
         if (nearT) return HANDLE.N;
         if (nearB) return HANDLE.S;
         if (nearL) return HANDLE.W;
         if (nearR) return HANDLE.E;
       }
-
       return null;
     }
 
@@ -316,7 +297,6 @@
       return null;
     }
 
-    // ---- view helpers ----
     function fitToView() {
       if (!img) return;
       const rect = canvas.getBoundingClientRect();
@@ -341,7 +321,6 @@
       redraw();
     }
 
-    // ---- drawing ----
     function redraw() {
       ctx.setTransform(1,0,0,1,0,0);
       ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -363,7 +342,6 @@
 
       const selected = getSelected();
 
-      // selections
       for (let i=0;i<selections.length;i++) {
         const s = selections[i];
         const isSel = selected && s.id === selected.id;
@@ -375,7 +353,6 @@
         ctx.fillRect(s.x, s.y, s.w, s.h);
       }
 
-      // draw rect
       if (mode==="draw" && dragStartImg && dragNowImg) {
         const rect = normalizeRect(dragStartImg, dragNowImg, shiftHeld);
         ctx.lineWidth = 1/(view.zoom*r);
@@ -385,9 +362,8 @@
         ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
       }
 
-      // handles (draw as small squares but “pick radius” is handled in hit-test)
       if (selected) {
-        const sizeImg = (8 / view.zoom); // visible handle size
+        const sizeImg = (8 / view.zoom);
         const half = sizeImg/2;
         ctx.lineWidth = 1/(view.zoom*r);
         ctx.fillStyle = "rgba(15,17,21,0.95)";
@@ -399,7 +375,6 @@
       }
     }
 
-    // ---- selection CRUD ----
     function addSelection(rect) {
       if (!img) return;
       if (rect.w < 1 || rect.h < 1) return;
@@ -426,7 +401,24 @@
       updateButtons();
     }
 
-    // ---- export ----
+    function duplicateSelected(offset=10) {
+      const sel = getSelected();
+      if (!sel || !img) return;
+      beginActionSnapshotOnce();
+      const id = crypto?.randomUUID?.() ?? String(Date.now() + Math.random());
+      const copy = { x: sel.x + offset, y: sel.y + offset, w: sel.w, h: sel.h, id };
+      // clamp without shrinking size if possible
+      copy.x = clamp(copy.x, 0, Math.max(0, img.naturalWidth - copy.w));
+      copy.y = clamp(copy.y, 0, Math.max(0, img.naturalHeight - copy.h));
+      enforceBounds(copy);
+      selections.push(copy);
+      selectedId = id;
+      endAction();
+      renderList();
+      redraw();
+      updateButtons();
+    }
+
     function exportCropToBlob(sel) {
       const out = document.createElement("canvas");
       out.width = sel.w;
@@ -460,9 +452,7 @@
       for (let i=0;i<selections.length;i++) await exportOne(i);
     }
 
-    // ---- preview thumbnails (no stretch) ----
     function makeThumbCanvas(sel, sizePx) {
-      // square tile, letterboxed, pixelated
       const c = document.createElement("canvas");
       c.className = "thumbCanvas";
       c.width = sizePx;
@@ -471,7 +461,6 @@
       c.style.height = "100%";
       const tctx = c.getContext("2d");
       tctx.imageSmoothingEnabled = false;
-
       tctx.clearRect(0,0,sizePx,sizePx);
 
       const scale = Math.min(sizePx / sel.w, sizePx / sel.h);
@@ -518,12 +507,19 @@
         bExport.textContent = "Export";
         bExport.onclick = (e) => { e.stopPropagation(); exportOne(idx); };
 
+        const bDup = document.createElement("button");
+        bDup.className = "smallBtn";
+        bDup.textContent = "Duplicate";
+        bDup.onclick = (e) => { e.stopPropagation(); setSelected(s.id); duplicateSelected(10); };
+
         const bDel = document.createElement("button");
         bDel.className = "smallBtn danger";
         bDel.textContent = "Delete";
         bDel.onclick = (e) => { e.stopPropagation(); deleteSelectionById(s.id); };
 
+        // 2-row layout on small tiles: stack as needed (still fine)
         btnRow.appendChild(bExport);
+        btnRow.appendChild(bDup);
         btnRow.appendChild(bDel);
 
         item.appendChild(meta);
@@ -533,7 +529,7 @@
       });
     }
 
-    // ---- input: zoom/pan ----
+    // wheel zoom
     canvas.addEventListener("wheel", (ev) => {
       if (!img) return;
       ev.preventDefault();
@@ -544,11 +540,10 @@
 
     canvas.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
 
-    // ---- pointer interactions ----
+    // pointer
     canvas.addEventListener("pointerdown", (ev) => {
       if (!img) return;
 
-      // pan: space+drag OR middle mouse
       if (spaceHeld || ev.button === 1) {
         canvas.setPointerCapture(ev.pointerId);
         pointerDownId = ev.pointerId;
@@ -564,29 +559,23 @@
       const { sx, sy } = screenCssFromEvent(ev);
       const pImg = clampImgPoint(imgFromScreenCss(sx, sy));
 
-      const selected = getSelected();
       const hitSel = hitTestSelectionImg(pImg);
 
-      // If over a selection: prefer resize if near edge/handle, otherwise move
       if (hitSel) {
         setSelected(hitSel.id);
-
         const selNow = getSelected();
         const h = hitTestHandleOrEdge(pImg, selNow);
+        beginActionSnapshotOnce();
         if (h) {
-          beginActionSnapshotOnce();
           mode = "resize";
           resizeInfo = { handle: h, orig: { x: selNow.x, y: selNow.y, w: selNow.w, h: selNow.h } };
           return;
         }
-
-        beginActionSnapshotOnce();
         mode = "move";
         moveOffsetImg = { dx: pImg.x - selNow.x, dy: pImg.y - selNow.y };
         return;
       }
 
-      // draw new
       beginActionSnapshotOnce();
       mode = "draw";
       dragStartImg = pImg;
@@ -631,7 +620,7 @@
     function endPointer(ev) {
       if (!img || ev.pointerId !== pointerDownId) return;
 
-      if (mode === "draw" && dragStartImg && dragNowImg) {
+      if (mode==="draw" && dragStartImg && dragNowImg) {
         const rect = normalizeRect(dragStartImg, dragNowImg, shiftHeld);
         mode = "idle";
         dragStartImg = dragNowImg = null;
@@ -652,25 +641,35 @@
 
     canvas.addEventListener("pointerup", endPointer);
     canvas.addEventListener("pointercancel", () => {
-      mode = "idle";
-      pointerDownId = null;
-      dragStartImg = dragNowImg = null;
-      panStart = null;
-      moveOffsetImg = null;
-      resizeInfo = null;
+      mode="idle";
+      pointerDownId=null;
+      dragStartImg=dragNowImg=null;
+      panStart=null;
+      moveOffsetImg=null;
+      resizeInfo=null;
       endAction();
       redraw();
     });
 
-    // ---- keyboard ----
+    // keyboard
     window.addEventListener("keydown", (e) => {
       if (e.key === "Shift") shiftHeld = true;
       if (e.key === "Alt") altHeld = true;
       if (e.code === "Space") spaceHeld = true;
 
-      // Undo snapshot
-      const isUndo = (e.key.toLowerCase() === "z") && (e.ctrlKey || e.metaKey);
-      if (isUndo) { e.preventDefault(); undoSnapshot(); return; }
+      // Undo
+      if ((e.key.toLowerCase() === "z") && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        undoSnapshot();
+        return;
+      }
+
+      // Duplicate selected
+      if ((e.key.toLowerCase() === "d") && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        duplicateSelected(10);
+        return;
+      }
 
       // Zoom shortcuts
       if (img) {
@@ -687,11 +686,9 @@
         if (sel) deleteSelectionById(sel.id);
       }
 
-      // Arrow nudge + resize
+      // Arrow move/resize
       const sel = getSelected();
       if (!sel) return;
-
-      const step = shiftHeld ? 10 : 1;
 
       const arrow = ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key);
       if (!arrow) return;
@@ -699,15 +696,15 @@
       e.preventDefault();
       beginActionSnapshotOnce();
 
+      const step = shiftHeld ? 10 : 1;
+
       if (!altHeld) {
-        // move
         if (e.key === "ArrowLeft") sel.x -= step;
         if (e.key === "ArrowRight") sel.x += step;
         if (e.key === "ArrowUp") sel.y -= step;
         if (e.key === "ArrowDown") sel.y += step;
         enforceBounds(sel);
       } else {
-        // resize (from right/bottom) – simple & predictable
         if (e.key === "ArrowLeft") sel.w -= step;
         if (e.key === "ArrowRight") sel.w += step;
         if (e.key === "ArrowUp") sel.h -= step;
@@ -726,7 +723,7 @@
       if (e.code === "Space") spaceHeld = false;
     });
 
-    // ---- toolbar ----
+    // toolbar
     btnUndoSnapshot.addEventListener("click", undoSnapshot);
 
     btnUndoLast.addEventListener("click", () => {
@@ -751,7 +748,7 @@
 
     btnExportAll.addEventListener("click", exportAll);
 
-    // ---- preview slider ----
+    // preview slider
     function setThumbCssSize(v) {
       document.documentElement.style.setProperty("--thumb", `${v}px`);
       thumbVal.textContent = String(v);
@@ -760,7 +757,7 @@
     thumbSize.addEventListener("input", () => setThumbCssSize(Number(thumbSize.value)));
     setThumbCssSize(Number(thumbSize.value));
 
-    // ---- file load ----
+    // file load
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files?.[0];
       if (!file) return;
@@ -785,7 +782,7 @@
       im.src = url;
     });
 
-    // Init
+    // init
     resizeCanvasToCss();
     redraw();
     updateButtons();
