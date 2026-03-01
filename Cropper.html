@@ -3,52 +3,61 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Selection Crop Exporter (Zoom + Pan)</title>
+  <title>Selection Crop Exporter (Zoom+Pan+Nudge+Undo)</title>
   <style>
-    :root { color-scheme: dark; }
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0f1115; color:#e7e7e7; }
+    :root { color-scheme: dark; --thumb: 128px; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0f1115; color:#e7e7e7; }
     header { padding: 12px 14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; border-bottom:1px solid #242835; }
-    button, input[type="file"] {
+    button, input[type="file"], input[type="range"] {
       background:#1b2030; color:#e7e7e7; border:1px solid #2a3147; border-radius:10px; padding:10px 12px;
     }
     button { cursor:pointer; }
     button:disabled { opacity:.5; cursor:not-allowed; }
-    main { display:grid; grid-template-columns: 1fr 360px; gap: 12px; padding: 12px; }
+    main { display:grid; grid-template-columns: 1fr 420px; gap: 12px; padding: 12px; }
     .panel { border:1px solid #242835; border-radius: 12px; overflow:hidden; background:#101421; }
     .canvasWrap { padding: 10px; }
-    canvas { display:block; background:#0b0e14; border:1px solid #242835; border-radius:10px; width: 100%; height: 70vh; }
+    canvas#c { display:block; background:#0b0e14; border:1px solid #242835; border-radius:10px; width:100%; height: 72vh; }
     .hint { padding: 10px 12px; border-top:1px solid #242835; color:#b9c0d4; font-size: 13px; line-height: 1.35; }
     .sidebar { display:flex; flex-direction:column; }
-    .sidebar header { border-bottom:1px solid #242835; }
-    .list { padding:10px; display:flex; flex-direction:column; gap:10px; overflow:auto; max-height: calc(100vh - 110px); }
-    .item { border:1px solid #242835; border-radius:12px; background:#0f1320; padding:10px; display:grid; gap:8px; }
+    .sidebarTop { padding:12px 14px; border-bottom:1px solid #242835; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+    .sidebarTop .left { font-weight:600; }
+    .sliderRow { display:flex; gap:10px; align-items:center; color:#b9c0d4; font-size:12px; }
+    .sliderRow input[type="range"] { padding: 6px 10px; height: 36px; }
+    .list {
+      padding:10px;
+      display:grid;
+      grid-template-columns: repeat(auto-fill, minmax(var(--thumb), 1fr));
+      gap:10px;
+      overflow:auto;
+      max-height: calc(100vh - 140px);
+    }
+    .item { border:1px solid #242835; border-radius:12px; background:#0f1320; padding:10px; display:grid; gap:8px; cursor:pointer; }
     .item.selected { outline: 2px solid rgba(0,255,200,0.55); }
-    .row { display:flex; justify-content:space-between; gap:8px; align-items:center; }
-    .meta { color:#b9c0d4; font-size: 12px; }
-    .thumb { border-radius:10px; border:1px solid #242835; background:#0b0e14; width: 100%; image-rendering: pixelated; }
-    .smallBtn { padding:7px 10px; border-radius:10px; font-size: 13px; }
+    .meta { color:#b9c0d4; font-size: 12px; display:flex; justify-content:space-between; gap:8px; }
+    .thumbWrap { width: 100%; aspect-ratio: 1 / 1; border:1px solid #242835; border-radius:10px; background:#0b0e14; overflow:hidden; display:grid; place-items:center; }
+    .thumbCanvas { image-rendering: pixelated; display:block; }
+    .btnRow { display:flex; gap:8px; }
+    .smallBtn { padding:7px 10px; border-radius:10px; font-size: 13px; width:100%; }
     .danger { border-color:#4b2330; background:#231019; }
     .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
     .pill { font-size: 12px; color:#b9c0d4; padding:6px 10px; border:1px solid #242835; border-radius:999px; }
     .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; padding:2px 6px; border:1px solid #242835; border-radius:6px; background:#0b0e14; }
-    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } .list { max-height: 45vh; } }
   </style>
 </head>
 <body>
   <header>
     <input id="file" type="file" accept="image/*" />
     <div class="toolbar">
-      <button id="undo" disabled>Undo last</button>
+      <button id="undoBtn" disabled>Undo (Ctrl/Cmd+Z)</button>
+      <button id="undoLast" disabled>Undo last add</button>
       <button id="clear" disabled>Clear all</button>
       <button id="exportAll" disabled>Export all PNGs</button>
       <span class="pill">Zoom: wheel / <span class="kbd">+</span> <span class="kbd">-</span> / reset <span class="kbd">0</span></span>
       <span class="pill">Pan: hold <span class="kbd">Space</span> + drag (or middle mouse)</span>
-      <span class="pill">Draw: drag empty space</span>
-      <span class="pill">Move: drag inside selection</span>
-      <span class="pill">Resize: drag handles</span>
+      <span class="pill">Move: arrows (Shift=10)</span>
+      <span class="pill">Resize: <span class="kbd">Alt</span>+arrows (Shift=10)</span>
       <span class="pill">Delete: <span class="kbd">Del</span>/<span class="kbd">Backspace</span></span>
-      <span class="pill">Hold <span class="kbd">Shift</span> = square draw</span>
-      <span class="pill">Cancel: <span class="kbd">Esc</span></span>
     </div>
   </header>
 
@@ -58,13 +67,20 @@
         <canvas id="c"></canvas>
       </div>
       <div class="hint">
-        Selections are stored in original image pixels. Export crops are exact pixels (no smoothing).<br/>
-        Viewport only affects how you see/edit (zoom/pan), never the exported pixels.
+        Exports are exact pixels (no smoothing). Viewport zoom/pan only affects editing view, never exported crops.<br/>
+        Resize is prioritized when clicking near edges/handles to prevent accidental moves.
       </div>
     </section>
 
     <aside class="panel sidebar">
-      <header><div style="padding:12px 14px; font-weight:600;">Selections</div></header>
+      <div class="sidebarTop">
+        <div class="left">Selections</div>
+        <div class="sliderRow">
+          <span>Preview size</span>
+          <input id="thumbSize" type="range" min="64" max="240" step="8" value="128" />
+          <span id="thumbVal" class="kbd">128</span>
+        </div>
+      </div>
       <div id="list" class="list"></div>
     </aside>
   </main>
@@ -75,36 +91,94 @@
     const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
 
     const listEl = document.getElementById('list');
-    const btnUndo = document.getElementById('undo');
+    const btnUndoSnapshot = document.getElementById('undoBtn');
+    const btnUndoLast = document.getElementById('undoLast');
     const btnClear = document.getElementById('clear');
     const btnExportAll = document.getElementById('exportAll');
 
-    // Image + selections (image space pixels)
+    const thumbSize = document.getElementById('thumbSize');
+    const thumbVal = document.getElementById('thumbVal');
+
+    // Image + selections (image-space pixels)
     let img = null;
     let selections = []; // {x,y,w,h,id}
     let selectedId = null;
 
-    // View transform (screen space pixels)
-    // screen = image * zoom + pan
+    // View transform (CSS px)
     const view = { zoom: 1, panX: 0, panY: 0, minZoom: 0.05, maxZoom: 64 };
 
     // Interaction state
     let mode = "idle"; // idle | draw | move | resize | pan
     let pointerDownId = null;
-    let dragStartImg = null;  // {x,y} in image space
-    let dragNowImg = null;    // {x,y} in image space
-    let panStart = null;      // {sx,sy, panX, panY} in screen
-    let moveOffsetImg = null; // {dx,dy} in image space
-    let resizeInfo = null;    // {handle, orig:{x,y,w,h}}
+    let dragStartImg = null;
+    let dragNowImg = null;
+    let panStart = null;
+    let moveOffsetImg = null;
+    let resizeInfo = null;
 
     // Keys
     let shiftHeld = false;
+    let altHeld = false;
     let spaceHeld = false;
 
-    // Ensure no filtering
+    // Undo snapshot stack (full state)
+    const undoStack = [];
+    const UNDO_LIMIT = 200;
+    let actionSnapshotTaken = false;
+
+    // no smoothing
     ctx.imageSmoothingEnabled = false;
 
-    function dpr() { return window.devicePixelRatio || 1; }
+    // ---- utilities ----
+    const dpr = () => window.devicePixelRatio || 1;
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+    function deepCopySelections(arr) {
+      return arr.map(s => ({ x:s.x, y:s.y, w:s.w, h:s.h, id:s.id }));
+    }
+
+    function pushUndoSnapshot() {
+      undoStack.push({
+        selections: deepCopySelections(selections),
+        selectedId,
+        view: { zoom:view.zoom, panX:view.panX, panY:view.panY }
+      });
+      while (undoStack.length > UNDO_LIMIT) undoStack.shift();
+      updateButtons();
+    }
+
+    function beginActionSnapshotOnce() {
+      if (actionSnapshotTaken) return;
+      pushUndoSnapshot();
+      actionSnapshotTaken = true;
+    }
+
+    function endAction() {
+      actionSnapshotTaken = false;
+      updateButtons();
+    }
+
+    function undoSnapshot() {
+      if (!undoStack.length) return;
+      const snap = undoStack.pop();
+      selections = deepCopySelections(snap.selections);
+      selectedId = snap.selectedId;
+      view.zoom = snap.view.zoom;
+      view.panX = snap.view.panX;
+      view.panY = snap.view.panY;
+      renderList();
+      redraw();
+      updateButtons();
+    }
+
+    function updateButtons() {
+      const hasImg = !!img;
+      const hasSel = selections.length > 0;
+      btnUndoLast.disabled = !hasSel;
+      btnClear.disabled = !hasSel;
+      btnExportAll.disabled = !(hasImg && hasSel);
+      btnUndoSnapshot.disabled = undoStack.length === 0;
+    }
 
     function resizeCanvasToCss() {
       const rect = canvas.getBoundingClientRect();
@@ -114,103 +188,125 @@
       ctx.imageSmoothingEnabled = false;
       redraw();
     }
-
     window.addEventListener("resize", resizeCanvasToCss);
 
-    function setButtons() {
-      const hasImg = !!img;
-      const hasSel = selections.length > 0;
-      btnUndo.disabled = !hasSel;
-      btnClear.disabled = !hasSel;
-      btnExportAll.disabled = !(hasImg && hasSel);
-    }
-
-    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-
-    // Coordinate transforms (screen CSS px <-> image px)
     function screenCssFromEvent(ev) {
       const rect = canvas.getBoundingClientRect();
       return { sx: ev.clientX - rect.left, sy: ev.clientY - rect.top, rect };
     }
-
     function imgFromScreenCss(sx, sy) {
       return { x: (sx - view.panX) / view.zoom, y: (sy - view.panY) / view.zoom };
     }
-
-    function screenCssFromImg(x, y) {
-      return { sx: x * view.zoom + view.panX, sy: y * view.zoom + view.panY };
-    }
-
     function clampImgPoint(p) {
       if (!img) return p;
-      return {
-        x: clamp(Math.round(p.x), 0, img.naturalWidth),
-        y: clamp(Math.round(p.y), 0, img.naturalHeight),
-      };
+      return { x: clamp(Math.round(p.x), 0, img.naturalWidth), y: clamp(Math.round(p.y), 0, img.naturalHeight) };
     }
-
     function normalizeRect(a, b, forceSquare=false) {
-      let x1 = a.x, y1 = a.y, x2 = b.x, y2 = b.y;
-      let w = x2 - x1, h = y2 - y1;
+      let x1=a.x, y1=a.y, x2=b.x, y2=b.y;
+      let w=x2-x1, h=y2-y1;
       if (forceSquare) {
         const s = Math.min(Math.abs(w), Math.abs(h));
-        w = Math.sign(w || 1) * s;
-        h = Math.sign(h || 1) * s;
-        x2 = x1 + w;
-        y2 = y1 + h;
+        w = Math.sign(w||1)*s;
+        h = Math.sign(h||1)*s;
+        x2 = x1 + w; y2 = y1 + h;
       }
-      const x = Math.min(x1, x2);
-      const y = Math.min(y1, y2);
-      const width = Math.abs(x2 - x1);
-      const height = Math.abs(y2 - y1);
-      return { x, y, w: width, h: height };
+      return { x: Math.min(x1,x2), y: Math.min(y1,y2), w: Math.abs(x2-x1), h: Math.abs(y2-y1) };
     }
 
-    function getSelected() {
-      return selections.find(s => s.id === selectedId) || null;
-    }
+    function getSelected() { return selections.find(s => s.id === selectedId) || null; }
+    function setSelected(id) { selectedId = id; renderList(); redraw(); }
 
-    function setSelected(id) {
-      selectedId = id;
-      renderList();
-      redraw();
+    function enforceBounds(sel) {
+      if (!img) return;
+      sel.x = clamp(sel.x, 0, img.naturalWidth);
+      sel.y = clamp(sel.y, 0, img.naturalHeight);
+      sel.w = clamp(sel.w, 0, img.naturalWidth - sel.x);
+      sel.h = clamp(sel.h, 0, img.naturalHeight - sel.y);
+      sel.x = Math.round(sel.x); sel.y = Math.round(sel.y);
+      sel.w = Math.round(sel.w); sel.h = Math.round(sel.h);
+      // prevent 0-sized selections during edits
+      if (sel.w < 1) sel.w = 1;
+      if (sel.h < 1) sel.h = 1;
+      sel.w = clamp(sel.w, 1, img.naturalWidth - sel.x);
+      sel.h = clamp(sel.h, 1, img.naturalHeight - sel.y);
     }
 
     function pointInRect(p, r) {
       return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
     }
 
-    // Resize handles
+    // ---- precise resize hit-testing ----
     const HANDLE = { NW:"nw", N:"n", NE:"ne", W:"w", E:"e", SW:"sw", S:"s", SE:"se" };
 
-    function handleSizeImg() {
-      // ~10 CSS px regardless zoom
-      return 10 / view.zoom;
-    }
-
-    function getHandleRectsImg(sel) {
-      const hs = handleSizeImg();
-      const x = sel.x, y = sel.y, w = sel.w, h = sel.h;
-      const cx = x + w / 2, cy = y + h / 2;
-      const mk = (px, py) => ({ x: px - hs/2, y: py - hs/2, w: hs, h: hs });
+    function handlePoints(sel) {
+      const x=sel.x, y=sel.y, w=sel.w, h=sel.h;
+      const cx = x + w/2, cy = y + h/2;
       return [
-        { handle: HANDLE.NW, rect: mk(x, y) },
-        { handle: HANDLE.N,  rect: mk(cx, y) },
-        { handle: HANDLE.NE, rect: mk(x + w, y) },
-        { handle: HANDLE.W,  rect: mk(x, cy) },
-        { handle: HANDLE.E,  rect: mk(x + w, cy) },
-        { handle: HANDLE.SW, rect: mk(x, y + h) },
-        { handle: HANDLE.S,  rect: mk(cx, y + h) },
-        { handle: HANDLE.SE, rect: mk(x + w, y + h) },
+        {h:HANDLE.NW, x:x,   y:y},
+        {h:HANDLE.N,  x:cx,  y:y},
+        {h:HANDLE.NE, x:x+w, y:y},
+        {h:HANDLE.W,  x:x,   y:cy},
+        {h:HANDLE.E,  x:x+w, y:cy},
+        {h:HANDLE.SW, x:x,   y:y+h},
+        {h:HANDLE.S,  x:cx,  y:y+h},
+        {h:HANDLE.SE, x:x+w, y:y+h},
       ];
     }
 
-    function hitTestHandleImg(pImg, sel) {
-      const hs = getHandleRectsImg(sel);
-      for (const h of hs) {
-        if (pointInRect(pImg, h.rect)) return h.handle;
+    function hitTestHandleOrEdge(pImg, sel) {
+      // tolerance in SCREEN px (stable across zoom)
+      const tolPx = 10; // handle/edge pickup radius
+      const tolImg = tolPx / view.zoom;
+
+      // 1) handles (closest wins)
+      let best = null;
+      let bestD2 = Infinity;
+      for (const hp of handlePoints(sel)) {
+        const dx = pImg.x - hp.x;
+        const dy = pImg.y - hp.y;
+        const d2 = dx*dx + dy*dy;
+        if (d2 < bestD2) { bestD2 = d2; best = hp.h; }
       }
+      if (bestD2 <= tolImg*tolImg) return best;
+
+      // 2) near edges (prefer resize over move)
+      if (!pointInRect(pImg, sel)) return null;
+
+      const dl = Math.abs(pImg.x - sel.x);
+      const dr = Math.abs((sel.x + sel.w) - pImg.x);
+      const dt = Math.abs(pImg.y - sel.y);
+      const db = Math.abs((sel.y + sel.h) - pImg.y);
+
+      const nearL = dl <= tolImg, nearR = dr <= tolImg, nearT = dt <= tolImg, nearB = db <= tolImg;
+
+      if ((nearL || nearR || nearT || nearB)) {
+        // corners first
+        if (nearL && nearT) return HANDLE.NW;
+        if (nearR && nearT) return HANDLE.NE;
+        if (nearL && nearB) return HANDLE.SW;
+        if (nearR && nearB) return HANDLE.SE;
+        // edges
+        if (nearT) return HANDLE.N;
+        if (nearB) return HANDLE.S;
+        if (nearL) return HANDLE.W;
+        if (nearR) return HANDLE.E;
+      }
+
       return null;
+    }
+
+    function resizeUsingHandle(sel, handle, p, orig) {
+      const x1=orig.x, y1=orig.y, x2=orig.x+orig.w, y2=orig.y+orig.h;
+      let ax1=x1, ay1=y1, ax2=x2, ay2=y2;
+      if (handle.includes("n")) ay1 = p.y;
+      if (handle.includes("s")) ay2 = p.y;
+      if (handle.includes("w")) ax1 = p.x;
+      if (handle.includes("e")) ax2 = p.x;
+      sel.x = Math.min(ax1, ax2);
+      sel.y = Math.min(ay1, ay2);
+      sel.w = Math.abs(ax2-ax1);
+      sel.h = Math.abs(ay2-ay1);
+      enforceBounds(sel);
     }
 
     function hitTestSelectionImg(pImg) {
@@ -220,47 +316,17 @@
       return null;
     }
 
-    function enforceBounds(sel) {
-      if (!img) return;
-      sel.x = clamp(sel.x, 0, img.naturalWidth);
-      sel.y = clamp(sel.y, 0, img.naturalHeight);
-      sel.w = clamp(sel.w, 0, img.naturalWidth - sel.x);
-      sel.h = clamp(sel.h, 0, img.naturalHeight - sel.y);
-      sel.x = Math.round(sel.x);
-      sel.y = Math.round(sel.y);
-      sel.w = Math.round(sel.w);
-      sel.h = Math.round(sel.h);
-    }
-
-    function setRectFromCorners(sel, x1, y1, x2, y2) {
-      const x = Math.min(x1, x2);
-      const y = Math.min(y1, y2);
-      sel.x = x; sel.y = y; sel.w = Math.abs(x2 - x1); sel.h = Math.abs(y2 - y1);
-      enforceBounds(sel);
-    }
-
-    function resizeUsingHandle(sel, handle, p, orig) {
-      const x1 = orig.x, y1 = orig.y, x2 = orig.x + orig.w, y2 = orig.y + orig.h;
-      let ax1 = x1, ay1 = y1, ax2 = x2, ay2 = y2;
-      if (handle.includes("n")) ay1 = p.y;
-      if (handle.includes("s")) ay2 = p.y;
-      if (handle.includes("w")) ax1 = p.x;
-      if (handle.includes("e")) ax2 = p.x;
-      setRectFromCorners(sel, ax1, ay1, ax2, ay2);
-    }
-
+    // ---- view helpers ----
     function fitToView() {
       if (!img) return;
       const rect = canvas.getBoundingClientRect();
-      const pad = 20; // CSS px padding
+      const pad = 20;
       const zx = (rect.width - pad*2) / img.naturalWidth;
       const zy = (rect.height - pad*2) / img.naturalHeight;
       view.zoom = clamp(Math.min(zx, zy), view.minZoom, view.maxZoom);
-      // center
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
-      view.panX = cx - (img.naturalWidth * view.zoom) / 2;
-      view.panY = cy - (img.naturalHeight * view.zoom) / 2;
+      const cx = rect.width/2, cy = rect.height/2;
+      view.panX = cx - (img.naturalWidth * view.zoom)/2;
+      view.panY = cy - (img.naturalHeight * view.zoom)/2;
       redraw();
     }
 
@@ -268,8 +334,6 @@
       const oldZoom = view.zoom;
       const newZoom = clamp(oldZoom * factor, view.minZoom, view.maxZoom);
       if (newZoom === oldZoom) return;
-
-      // Keep the image point under cursor fixed
       const imgPt = imgFromScreenCss(sx, sy);
       view.zoom = newZoom;
       view.panX = sx - imgPt.x * newZoom;
@@ -277,161 +341,92 @@
       redraw();
     }
 
+    // ---- drawing ----
     function redraw() {
-      // Clear (in device pixels)
       ctx.setTransform(1,0,0,1,0,0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0,0,canvas.width,canvas.height);
 
-      // Placeholder
       if (!img) {
-        ctx.fillStyle = "#0b0e14";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#b9c0d4";
-        ctx.font = `${16 * dpr()}px system-ui`;
-        ctx.fillText("Load an image to start selecting.", 20 * dpr(), 30 * dpr());
+        ctx.fillStyle="#0b0e14";
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle="#b9c0d4";
+        ctx.font = `${16*dpr()}px system-ui`;
+        ctx.fillText("Load an image to start selecting.", 20*dpr(), 30*dpr());
         return;
       }
 
-      // Apply transform: CSS px -> device px
       const r = dpr();
-      // world transform in CSS px: image*zoom + pan
-      // convert to device px by scaling r
-      ctx.setTransform(view.zoom * r, 0, 0, view.zoom * r, view.panX * r, view.panY * r);
+      ctx.setTransform(view.zoom*r, 0, 0, view.zoom*r, view.panX*r, view.panY*r);
       ctx.imageSmoothingEnabled = false;
 
-      // Draw image in image space
       ctx.drawImage(img, 0, 0);
 
       const selected = getSelected();
 
-      // Draw selections in image space
-      for (let i = 0; i < selections.length; i++) {
+      // selections
+      for (let i=0;i<selections.length;i++) {
         const s = selections[i];
         const isSel = selected && s.id === selected.id;
 
-        // 1px screen stroke => in image space it's 1/(zoom*r) device? easiest: set lineWidth in image units:
         ctx.lineWidth = (isSel ? 2 : 1) / (view.zoom * r);
-        ctx.strokeStyle = isSel ? "rgba(0, 255, 200, 1.0)" : "rgba(0, 255, 200, 0.75)";
-        ctx.fillStyle = isSel ? "rgba(0, 255, 200, 0.16)" : "rgba(0, 255, 200, 0.10)";
+        ctx.strokeStyle = isSel ? "rgba(0,255,200,1)" : "rgba(0,255,200,0.75)";
+        ctx.fillStyle = isSel ? "rgba(0,255,200,0.16)" : "rgba(0,255,200,0.10)";
         ctx.strokeRect(s.x, s.y, s.w, s.h);
         ctx.fillRect(s.x, s.y, s.w, s.h);
-
-        // Label (size in screen px -> convert to image units)
-        const lh = 18 / view.zoom;
-        const lw = 120 / view.zoom;
-        ctx.fillStyle = "rgba(15, 17, 21, 0.85)";
-        ctx.fillRect(s.x, Math.max(0, s.y - lh), lw, lh);
-        ctx.fillStyle = "rgba(0,255,200,0.95)";
-        ctx.font = `${12 / view.zoom}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-        ctx.fillText(`#${i+1} ${s.w}x${s.h}`, s.x + (6 / view.zoom), Math.max(12 / view.zoom, s.y - (5 / view.zoom)));
       }
 
-      // Draw current draw-rect
-      if (mode === "draw" && dragStartImg && dragNowImg) {
+      // draw rect
+      if (mode==="draw" && dragStartImg && dragNowImg) {
         const rect = normalizeRect(dragStartImg, dragNowImg, shiftHeld);
-        ctx.lineWidth = 1 / (view.zoom * r);
-        ctx.strokeStyle = "rgba(255, 210, 0, 0.95)";
-        ctx.fillStyle = "rgba(255, 210, 0, 0.12)";
+        ctx.lineWidth = 1/(view.zoom*r);
+        ctx.strokeStyle = "rgba(255,210,0,0.95)";
+        ctx.fillStyle = "rgba(255,210,0,0.12)";
         ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
         ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
       }
 
-      // Handles for selected
-      if (selected && selected.w > 0 && selected.h > 0) {
-        const handles = getHandleRectsImg(selected);
-        ctx.lineWidth = 1 / (view.zoom * r);
-        ctx.fillStyle = "rgba(15, 17, 21, 0.95)";
-        ctx.strokeStyle = "rgba(0, 255, 200, 0.95)";
-        for (const h of handles) {
-          ctx.fillRect(h.rect.x, h.rect.y, h.rect.w, h.rect.h);
-          ctx.strokeRect(h.rect.x, h.rect.y, h.rect.w, h.rect.h);
+      // handles (draw as small squares but “pick radius” is handled in hit-test)
+      if (selected) {
+        const sizeImg = (8 / view.zoom); // visible handle size
+        const half = sizeImg/2;
+        ctx.lineWidth = 1/(view.zoom*r);
+        ctx.fillStyle = "rgba(15,17,21,0.95)";
+        ctx.strokeStyle = "rgba(0,255,200,0.95)";
+        for (const hp of handlePoints(selected)) {
+          ctx.fillRect(hp.x-half, hp.y-half, sizeImg, sizeImg);
+          ctx.strokeRect(hp.x-half, hp.y-half, sizeImg, sizeImg);
         }
       }
     }
 
-    function renderList() {
-      listEl.innerHTML = "";
-      if (!img) {
-        listEl.innerHTML = `<div class="meta" style="padding:10px;">No image loaded.</div>`;
-        return;
-      }
-      if (selections.length === 0) {
-        listEl.innerHTML = `<div class="meta" style="padding:10px;">No selections yet. Drag empty space to create one.</div>`;
-        return;
-      }
-
-      selections.forEach((s, idx) => {
-        const item = document.createElement("div");
-        item.className = "item" + (s.id === selectedId ? " selected" : "");
-
-        const row1 = document.createElement("div");
-        row1.className = "row";
-
-        const title = document.createElement("div");
-        title.innerHTML = `<strong>#${idx+1}</strong> <span class="meta">(${s.x},${s.y}) ${s.w}×${s.h}</span>`;
-
-        const btns = document.createElement("div");
-        btns.style.display = "flex";
-        btns.style.gap = "8px";
-
-        const bExport = document.createElement("button");
-        bExport.className = "smallBtn";
-        bExport.textContent = "Export";
-        bExport.onclick = (e) => { e.stopPropagation(); exportOne(idx); };
-
-        const bDel = document.createElement("button");
-        bDel.className = "smallBtn danger";
-        bDel.textContent = "Delete";
-        bDel.onclick = (e) => { e.stopPropagation(); deleteSelectionById(s.id); };
-
-        btns.appendChild(bExport);
-        btns.appendChild(bDel);
-        row1.appendChild(title);
-        row1.appendChild(btns);
-
-        const thumb = document.createElement("canvas");
-        thumb.width = Math.max(1, s.w);
-        thumb.height = Math.max(1, s.h);
-        thumb.className = "thumb";
-        const tctx = thumb.getContext("2d");
-        tctx.imageSmoothingEnabled = false;
-        tctx.clearRect(0, 0, thumb.width, thumb.height);
-        tctx.drawImage(img, s.x, s.y, s.w, s.h, 0, 0, s.w, s.h);
-
-        item.onclick = () => {
-          setSelected(s.id);
-          // optional: center view on selection
-        };
-
-        item.appendChild(row1);
-        item.appendChild(thumb);
-        listEl.appendChild(item);
-      });
-    }
-
-    function deleteSelectionById(id) {
-      const idx = selections.findIndex(s => s.id === id);
-      if (idx >= 0) selections.splice(idx, 1);
-      if (selectedId === id) selectedId = selections.at(-1)?.id ?? null;
-      setButtons();
-      renderList();
-      redraw();
-    }
-
+    // ---- selection CRUD ----
     function addSelection(rect) {
       if (!img) return;
       if (rect.w < 1 || rect.h < 1) return;
+      beginActionSnapshotOnce();
       const id = crypto?.randomUUID?.() ?? String(Date.now() + Math.random());
       const sel = { ...rect, id };
-      // clamp
       enforceBounds(sel);
       selections.push(sel);
       selectedId = id;
-      setButtons();
+      endAction();
       renderList();
       redraw();
+      updateButtons();
     }
 
+    function deleteSelectionById(id) {
+      beginActionSnapshotOnce();
+      const idx = selections.findIndex(s => s.id === id);
+      if (idx >= 0) selections.splice(idx, 1);
+      if (selectedId === id) selectedId = selections.at(-1)?.id ?? null;
+      endAction();
+      renderList();
+      redraw();
+      updateButtons();
+    }
+
+    // ---- export ----
     function exportCropToBlob(sel) {
       const out = document.createElement("canvas");
       out.width = sel.w;
@@ -458,23 +453,98 @@
       const blob = await exportCropToBlob(sel);
       if (!blob) return;
       const base = (fileInput.files?.[0]?.name ?? "image").replace(/\.[^/.]+$/, "");
-      downloadBlob(blob, `${base}_crop_${String(index+1).padStart(3, "0")}_${sel.w}x${sel.h}.png`);
+      downloadBlob(blob, `${base}_crop_${String(index+1).padStart(3,"0")}_${sel.w}x${sel.h}.png`);
     }
 
     async function exportAll() {
-      for (let i = 0; i < selections.length; i++) await exportOne(i);
+      for (let i=0;i<selections.length;i++) await exportOne(i);
     }
 
-    // Wheel zoom (prevent page scroll)
+    // ---- preview thumbnails (no stretch) ----
+    function makeThumbCanvas(sel, sizePx) {
+      // square tile, letterboxed, pixelated
+      const c = document.createElement("canvas");
+      c.className = "thumbCanvas";
+      c.width = sizePx;
+      c.height = sizePx;
+      c.style.width = "100%";
+      c.style.height = "100%";
+      const tctx = c.getContext("2d");
+      tctx.imageSmoothingEnabled = false;
+
+      tctx.clearRect(0,0,sizePx,sizePx);
+
+      const scale = Math.min(sizePx / sel.w, sizePx / sel.h);
+      const dw = Math.max(1, Math.floor(sel.w * scale));
+      const dh = Math.max(1, Math.floor(sel.h * scale));
+      const dx = Math.floor((sizePx - dw)/2);
+      const dy = Math.floor((sizePx - dh)/2);
+
+      tctx.drawImage(img, sel.x, sel.y, sel.w, sel.h, dx, dy, dw, dh);
+      return c;
+    }
+
+    function renderList() {
+      listEl.innerHTML = "";
+      if (!img) {
+        listEl.innerHTML = `<div class="meta" style="padding:10px;">No image loaded.</div>`;
+        return;
+      }
+      if (selections.length === 0) {
+        listEl.innerHTML = `<div class="meta" style="padding:10px;">No selections yet. Drag on empty space to create one.</div>`;
+        return;
+      }
+
+      const tile = Number(thumbSize.value);
+
+      selections.forEach((s, idx) => {
+        const item = document.createElement("div");
+        item.className = "item" + (s.id === selectedId ? " selected" : "");
+        item.onclick = () => setSelected(s.id);
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.innerHTML = `<span><strong>#${idx+1}</strong> ${s.w}×${s.h}</span><span>(${s.x},${s.y})</span>`;
+
+        const wrap = document.createElement("div");
+        wrap.className = "thumbWrap";
+        wrap.appendChild(makeThumbCanvas(s, tile));
+
+        const btnRow = document.createElement("div");
+        btnRow.className = "btnRow";
+
+        const bExport = document.createElement("button");
+        bExport.className = "smallBtn";
+        bExport.textContent = "Export";
+        bExport.onclick = (e) => { e.stopPropagation(); exportOne(idx); };
+
+        const bDel = document.createElement("button");
+        bDel.className = "smallBtn danger";
+        bDel.textContent = "Delete";
+        bDel.onclick = (e) => { e.stopPropagation(); deleteSelectionById(s.id); };
+
+        btnRow.appendChild(bExport);
+        btnRow.appendChild(bDel);
+
+        item.appendChild(meta);
+        item.appendChild(wrap);
+        item.appendChild(btnRow);
+        listEl.appendChild(item);
+      });
+    }
+
+    // ---- input: zoom/pan ----
     canvas.addEventListener("wheel", (ev) => {
       if (!img) return;
       ev.preventDefault();
       const { sx, sy } = screenCssFromEvent(ev);
-      const factor = Math.exp(-ev.deltaY * 0.0015); // smooth
+      const factor = Math.exp(-ev.deltaY * 0.0015);
       zoomAt(sx, sy, factor);
-    }, { passive: false });
+    }, { passive:false });
 
-    // Pointer interactions
+    canvas.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
+
+    // ---- pointer interactions ----
     canvas.addEventListener("pointerdown", (ev) => {
       if (!img) return;
 
@@ -484,7 +554,7 @@
         pointerDownId = ev.pointerId;
         mode = "pan";
         const { sx, sy } = screenCssFromEvent(ev);
-        panStart = { sx, sy, panX: view.panX, panY: view.panY };
+        panStart = { sx, sy, panX:view.panX, panY:view.panY };
         return;
       }
 
@@ -497,25 +567,27 @@
       const selected = getSelected();
       const hitSel = hitTestSelectionImg(pImg);
 
-      // Resize if grabbing a handle on selected
-      if (selected) {
-        const h = hitTestHandleImg(pImg, selected);
-        if (h) {
-          mode = "resize";
-          resizeInfo = { handle: h, orig: { x: selected.x, y: selected.y, w: selected.w, h: selected.h } };
-          return;
-        }
-      }
-
-      // Move if inside any selection
+      // If over a selection: prefer resize if near edge/handle, otherwise move
       if (hitSel) {
         setSelected(hitSel.id);
+
+        const selNow = getSelected();
+        const h = hitTestHandleOrEdge(pImg, selNow);
+        if (h) {
+          beginActionSnapshotOnce();
+          mode = "resize";
+          resizeInfo = { handle: h, orig: { x: selNow.x, y: selNow.y, w: selNow.w, h: selNow.h } };
+          return;
+        }
+
+        beginActionSnapshotOnce();
         mode = "move";
-        moveOffsetImg = { dx: pImg.x - hitSel.x, dy: pImg.y - hitSel.y };
+        moveOffsetImg = { dx: pImg.x - selNow.x, dy: pImg.y - selNow.y };
         return;
       }
 
-      // Draw new
+      // draw new
+      beginActionSnapshotOnce();
       mode = "draw";
       dragStartImg = pImg;
       dragNowImg = pImg;
@@ -524,6 +596,7 @@
 
     canvas.addEventListener("pointermove", (ev) => {
       if (!img || ev.pointerId !== pointerDownId) return;
+
       const { sx, sy } = screenCssFromEvent(ev);
 
       if (mode === "pan") {
@@ -573,6 +646,7 @@
       panStart = null;
       moveOffsetImg = null;
       resizeInfo = null;
+      endAction();
       redraw();
     }
 
@@ -584,65 +658,109 @@
       panStart = null;
       moveOffsetImg = null;
       resizeInfo = null;
+      endAction();
       redraw();
     });
 
-    // Keyboard
+    // ---- keyboard ----
     window.addEventListener("keydown", (e) => {
       if (e.key === "Shift") shiftHeld = true;
+      if (e.key === "Alt") altHeld = true;
       if (e.code === "Space") spaceHeld = true;
 
-      if (e.key === "Escape") {
-        if (mode === "draw") {
-          mode = "idle";
-          dragStartImg = dragNowImg = null;
-          pointerDownId = null;
-          redraw();
-        }
+      // Undo snapshot
+      const isUndo = (e.key.toLowerCase() === "z") && (e.ctrlKey || e.metaKey);
+      if (isUndo) { e.preventDefault(); undoSnapshot(); return; }
+
+      // Zoom shortcuts
+      if (img) {
+        const rect = canvas.getBoundingClientRect();
+        const cx = rect.width/2, cy = rect.height/2;
+        if (e.key === "+" || e.key === "=") zoomAt(cx, cy, 1.15);
+        if (e.key === "-" || e.key === "_") zoomAt(cx, cy, 1/1.15);
+        if (e.key === "0") fitToView();
       }
 
+      // Delete
       if (e.key === "Delete" || e.key === "Backspace") {
         const sel = getSelected();
         if (sel) deleteSelectionById(sel.id);
       }
 
-      // Zoom shortcuts
-      const rect = canvas.getBoundingClientRect();
-      const centerSx = rect.width / 2;
-      const centerSy = rect.height / 2;
-      if (e.key === "+" || e.key === "=") zoomAt(centerSx, centerSy, 1.15);
-      if (e.key === "-" || e.key === "_") zoomAt(centerSx, centerSy, 1/1.15);
-      if (e.key === "0") fitToView();
+      // Arrow nudge + resize
+      const sel = getSelected();
+      if (!sel) return;
+
+      const step = shiftHeld ? 10 : 1;
+
+      const arrow = ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key);
+      if (!arrow) return;
+
+      e.preventDefault();
+      beginActionSnapshotOnce();
+
+      if (!altHeld) {
+        // move
+        if (e.key === "ArrowLeft") sel.x -= step;
+        if (e.key === "ArrowRight") sel.x += step;
+        if (e.key === "ArrowUp") sel.y -= step;
+        if (e.key === "ArrowDown") sel.y += step;
+        enforceBounds(sel);
+      } else {
+        // resize (from right/bottom) – simple & predictable
+        if (e.key === "ArrowLeft") sel.w -= step;
+        if (e.key === "ArrowRight") sel.w += step;
+        if (e.key === "ArrowUp") sel.h -= step;
+        if (e.key === "ArrowDown") sel.h += step;
+        enforceBounds(sel);
+      }
+
+      renderList();
+      redraw();
+      endAction();
     });
 
     window.addEventListener("keyup", (e) => {
       if (e.key === "Shift") shiftHeld = false;
+      if (e.key === "Alt") altHeld = false;
       if (e.code === "Space") spaceHeld = false;
     });
 
-    // Prevent middle click auto-scroll in some browsers
-    canvas.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
+    // ---- toolbar ----
+    btnUndoSnapshot.addEventListener("click", undoSnapshot);
 
-    // Toolbar
-    btnUndo.addEventListener("click", () => {
+    btnUndoLast.addEventListener("click", () => {
+      beginActionSnapshotOnce();
       const last = selections.pop();
       if (last && last.id === selectedId) selectedId = selections.at(-1)?.id ?? null;
-      setButtons();
+      endAction();
       renderList();
       redraw();
+      updateButtons();
     });
 
     btnClear.addEventListener("click", () => {
+      beginActionSnapshotOnce();
       selections = [];
       selectedId = null;
-      setButtons();
+      endAction();
       renderList();
       redraw();
+      updateButtons();
     });
 
     btnExportAll.addEventListener("click", exportAll);
 
-    // File load
+    // ---- preview slider ----
+    function setThumbCssSize(v) {
+      document.documentElement.style.setProperty("--thumb", `${v}px`);
+      thumbVal.textContent = String(v);
+      if (img) renderList();
+    }
+    thumbSize.addEventListener("input", () => setThumbCssSize(Number(thumbSize.value)));
+    setThumbCssSize(Number(thumbSize.value));
+
+    // ---- file load ----
     fileInput.addEventListener("change", async () => {
       const file = fileInput.files?.[0];
       if (!file) return;
@@ -655,10 +773,14 @@
         img = im;
         selections = [];
         selectedId = null;
-        setButtons();
-        renderList();
+        undoStack.length = 0;
+        actionSnapshotTaken = false;
+
         resizeCanvasToCss();
         fitToView();
+        renderList();
+        redraw();
+        updateButtons();
       };
       im.src = url;
     });
@@ -666,8 +788,7 @@
     // Init
     resizeCanvasToCss();
     redraw();
-    setButtons();
-    renderList();
+    updateButtons();
   </script>
 </body>
 </html>
