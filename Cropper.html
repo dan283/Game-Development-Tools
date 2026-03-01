@@ -1,12 +1,3 @@
-Below is an updated single-file tool with move + resize + delete for selections:
-	•	Select: click a selection (or click its item in the list)
-	•	Move: drag inside a selection
-	•	Resize: drag the corner/edge handles on the selected selection
-	•	Delete: press Delete/Backspace or use the Delete button in the list
-	•	Still exports pixel-perfect PNG crops with no smoothing
-
-Save as cropper.html:
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -85,4 +76,534 @@ Save as cropper.html:
 
     const listEl = document.getElementById('list');
     const btnUndo = document.getElementById('undo');
-    const btnClear = document.getElementById('
+    const btnClear = document.getElementById('clear');
+    const btnExportAll = document.getElementById('exportAll');
+
+    // State
+    let img = null;
+    let selections = []; // {x,y,w,h,id}
+    let selectedId = null;
+
+    // Interaction state
+    let mode = "idle"; // idle | draw | move | resize
+    let dragStart = null; // {x,y} in image pixels
+    let dragNow = null;   // {x,y} in image pixels
+    let pointerDownId = null;
+
+    let moveOffset = null; // {dx,dy}
+    let resizeInfo = null; // {handle, orig:{x,y,w,h}, anchor:{x,y}}
+
+    // Ensure no filtering / smoothing anywhere
+    ctx.imageSmoothingEnabled = false;
+
+    function setButtons() {
+      const hasImg = !!img;
+      const hasSel = selections.length > 0;
+      btnUndo.disabled = !hasSel;
+      btnClear.disabled = !hasSel;
+      btnExportAll.disabled = !(hasImg && hasSel);
+    }
+
+    function setCanvasToImage() {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      ctx.imageSmoothingEnabled = false;
+      redraw();
+    }
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    function getMousePosInImagePixels(ev) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (ev.clientX - rect.left) * scaleX;
+      const y = (ev.clientY - rect.top) * scaleY;
+      return {
+        x: clamp(Math.round(x), 0, canvas.width),
+        y: clamp(Math.round(y), 0, canvas.height),
+        scaleX, scaleY
+      };
+    }
+
+    function normalizeRect(a, b, forceSquare=false) {
+      let x1 = a.x, y1 = a.y, x2 = b.x, y2 = b.y;
+      let w = x2 - x1;
+      let h = y2 - y1;
+
+      if (forceSquare) {
+        const s = Math.min(Math.abs(w), Math.abs(h));
+        w = Math.sign(w || 1) * s;
+        h = Math.sign(h || 1) * s;
+        x2 = x1 + w;
+        y2 = y1 + h;
+      }
+
+      const x = Math.min(x1, x2);
+      const y = Math.min(y1, y2);
+      const width = Math.abs(x2 - x1);
+      const height = Math.abs(y2 - y1);
+
+      return { x, y, w: width, h: height };
+    }
+
+    function getSelected() {
+      return selections.find(s => s.id === selectedId) || null;
+    }
+
+    function setSelected(id) {
+      selectedId = id;
+      renderList();
+      redraw();
+    }
+
+    function pointInRect(p, r) {
+      return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+    }
+
+    // Handle layout for resizing
+    const HANDLE = {
+      NW: "nw", N: "n", NE: "ne",
+      W: "w",         E: "e",
+      SW: "sw", S: "s", SE: "se"
+    };
+
+    function getHandleRects(sel, handleSize) {
+      const x = sel.x, y = sel.y, w = sel.w, h = sel.h;
+      const hs = handleSize;
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+
+      // squares centered on points
+      const mk = (px, py) => ({ x: px - hs/2, y: py - hs/2, w: hs, h: hs });
+
+      return [
+        { handle: HANDLE.NW, rect: mk(x, y) },
+        { handle: HANDLE.N,  rect: mk(cx, y) },
+        { handle: HANDLE.NE, rect: mk(x + w, y) },
+        { handle: HANDLE.W,  rect: mk(x, cy) },
+        { handle: HANDLE.E,  rect: mk(x + w, cy) },
+        { handle: HANDLE.SW, rect: mk(x, y + h) },
+        { handle: HANDLE.S,  rect: mk(cx, y + h) },
+        { handle: HANDLE.SE, rect: mk(x + w, y + h) },
+      ];
+    }
+
+    function hitTestHandle(p, sel, handleSize) {
+      const hs = getHandleRects(sel, handleSize);
+      for (const h of hs) {
+        if (pointInRect(p, h.rect)) return h.handle;
+      }
+      return null;
+    }
+
+    function hitTestSelection(p) {
+      // return topmost (last) selection containing p
+      for (let i = selections.length - 1; i >= 0; i--) {
+        if (pointInRect(p, selections[i])) return selections[i];
+      }
+      return null;
+    }
+
+    function redraw() {
+      if (!img) {
+        canvas.width = 800;
+        canvas.height = 500;
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#0b0e14";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#b9c0d4";
+        ctx.font = "16px system-ui";
+        ctx.fillText("Load an image to start selecting.", 20, 30);
+        return;
+      }
+
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+
+      const selected = getSelected();
+
+      // Stored selections
+      ctx.save();
+      for (let i = 0; i < selections.length; i++) {
+        const s = selections[i];
+        const isSel = selected && s.id === selected.id;
+
+        ctx.lineWidth = isSel ? 2 : 1;
+        ctx.strokeStyle = isSel ? "rgba(0, 255, 200, 1.0)" : "rgba(0, 255, 200, 0.75)";
+        ctx.fillStyle = isSel ? "rgba(0, 255, 200, 0.16)" : "rgba(0, 255, 200, 0.10)";
+        ctx.strokeRect(s.x + 0.5, s.y + 0.5, s.w, s.h);
+        ctx.fillRect(s.x, s.y, s.w, s.h);
+
+        // Label
+        ctx.fillStyle = "rgba(15, 17, 21, 0.85)";
+        ctx.fillRect(s.x, Math.max(0, s.y - 18), 110, 18);
+        ctx.fillStyle = "rgba(0,255,200,0.95)";
+        ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
+        ctx.fillText(`#${i+1} ${s.w}x${s.h}`, s.x + 6, Math.max(12, s.y - 5));
+      }
+
+      // Current drag (draw mode)
+      if (mode === "draw" && dragStart && dragNow) {
+        const rect = normalizeRect(dragStart, dragNow, window.__shiftHeld === true);
+        ctx.strokeStyle = "rgba(255, 210, 0, 0.95)";
+        ctx.fillStyle = "rgba(255, 210, 0, 0.12)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w, rect.h);
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      }
+
+      // Handles for selected selection
+      if (selected && selected.w > 0 && selected.h > 0) {
+        const rectBB = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rectBB.width;
+        const scaleY = canvas.height / rectBB.height;
+        const handleSize = Math.max(10 * scaleX, 10 * scaleY); // ~10 CSS px
+
+        const handles = getHandleRects(selected, handleSize);
+        ctx.fillStyle = "rgba(15, 17, 21, 0.95)";
+        ctx.strokeStyle = "rgba(0, 255, 200, 0.95)";
+        ctx.lineWidth = 1;
+
+        for (const h of handles) {
+          ctx.fillRect(h.rect.x, h.rect.y, h.rect.w, h.rect.h);
+          ctx.strokeRect(h.rect.x + 0.5, h.rect.y + 0.5, h.rect.w, h.rect.h);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function renderList() {
+      listEl.innerHTML = "";
+      if (!img) {
+        listEl.innerHTML = `<div class="meta" style="padding:10px;">No image loaded.</div>`;
+        return;
+      }
+      if (selections.length === 0) {
+        listEl.innerHTML = `<div class="meta" style="padding:10px;">No selections yet. Drag on empty space to create one.</div>`;
+        return;
+      }
+
+      selections.forEach((s, idx) => {
+        const item = document.createElement("div");
+        item.className = "item" + (s.id === selectedId ? " selected" : "");
+
+        const row1 = document.createElement("div");
+        row1.className = "row";
+
+        const title = document.createElement("div");
+        title.innerHTML = `<strong>#${idx+1}</strong> <span class="meta">(${s.x},${s.y}) ${s.w}×${s.h}</span>`;
+
+        const btns = document.createElement("div");
+        btns.style.display = "flex";
+        btns.style.gap = "8px";
+
+        const bExport = document.createElement("button");
+        bExport.className = "smallBtn";
+        bExport.textContent = "Export";
+        bExport.onclick = (e) => { e.stopPropagation(); exportOne(idx); };
+
+        const bDel = document.createElement("button");
+        bDel.className = "smallBtn danger";
+        bDel.textContent = "Delete";
+        bDel.onclick = (e) => { e.stopPropagation(); deleteSelectionById(s.id); };
+
+        btns.appendChild(bExport);
+        btns.appendChild(bDel);
+
+        row1.appendChild(title);
+        row1.appendChild(btns);
+
+        const thumb = document.createElement("canvas");
+        thumb.width = Math.max(1, s.w);
+        thumb.height = Math.max(1, s.h);
+        thumb.className = "thumb";
+        const tctx = thumb.getContext("2d");
+        tctx.imageSmoothingEnabled = false;
+        tctx.clearRect(0, 0, thumb.width, thumb.height);
+        tctx.drawImage(img, s.x, s.y, s.w, s.h, 0, 0, s.w, s.h);
+
+        item.onclick = () => setSelected(s.id);
+
+        item.appendChild(row1);
+        item.appendChild(thumb);
+        listEl.appendChild(item);
+      });
+    }
+
+    function deleteSelectionById(id) {
+      const idx = selections.findIndex(s => s.id === id);
+      if (idx >= 0) selections.splice(idx, 1);
+      if (selectedId === id) selectedId = selections.at(-1)?.id ?? null;
+      setButtons();
+      renderList();
+      redraw();
+    }
+
+    function addSelection(rect) {
+      if (!img) return;
+      if (rect.w < 1 || rect.h < 1) return;
+      const id = crypto?.randomUUID?.() ?? String(Date.now() + Math.random());
+      selections.push({ ...rect, id });
+      selectedId = id;
+      setButtons();
+      renderList();
+      redraw();
+    }
+
+    function exportCropToBlob(sel) {
+      const out = document.createElement("canvas");
+      out.width = sel.w;
+      out.height = sel.h;
+      const octx = out.getContext("2d");
+      octx.imageSmoothingEnabled = false;
+      octx.drawImage(img, sel.x, sel.y, sel.w, sel.h, 0, 0, sel.w, sel.h);
+      return new Promise((resolve) => out.toBlob((blob) => resolve(blob), "image/png", 1.0));
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    async function exportOne(index) {
+      const sel = selections[index];
+      const blob = await exportCropToBlob(sel);
+      if (!blob) return;
+      const base = (fileInput.files?.[0]?.name ?? "image").replace(/\.[^/.]+$/, "");
+      downloadBlob(blob, `${base}_crop_${String(index+1).padStart(3, "0")}_${sel.w}x${sel.h}.png`);
+    }
+
+    async function exportAll() {
+      for (let i = 0; i < selections.length; i++) {
+        await exportOne(i);
+      }
+    }
+
+    function enforceBounds(sel) {
+      sel.x = clamp(sel.x, 0, canvas.width);
+      sel.y = clamp(sel.y, 0, canvas.height);
+      sel.w = clamp(sel.w, 0, canvas.width - sel.x);
+      sel.h = clamp(sel.h, 0, canvas.height - sel.y);
+      sel.x = Math.round(sel.x);
+      sel.y = Math.round(sel.y);
+      sel.w = Math.round(sel.w);
+      sel.h = Math.round(sel.h);
+    }
+
+    function setRectFromCorners(sel, x1, y1, x2, y2) {
+      const x = Math.min(x1, x2);
+      const y = Math.min(y1, y2);
+      const w = Math.abs(x2 - x1);
+      const h = Math.abs(y2 - y1);
+      sel.x = x; sel.y = y; sel.w = w; sel.h = h;
+      enforceBounds(sel);
+    }
+
+    function resizeUsingHandle(sel, handle, p, orig) {
+      // Determine which corner/edge is moving, with opposite anchor fixed.
+      const x1 = orig.x, y1 = orig.y, x2 = orig.x + orig.w, y2 = orig.y + orig.h;
+
+      let ax1 = x1, ay1 = y1, ax2 = x2, ay2 = y2;
+
+      if (handle.includes("n")) ay1 = p.y;
+      if (handle.includes("s")) ay2 = p.y;
+      if (handle.includes("w")) ax1 = p.x;
+      if (handle.includes("e")) ax2 = p.x;
+
+      // For pure N/S handles, keep x extents; for pure E/W handles, keep y extents.
+      // (already handled by not changing ax1/ax2 or ay1/ay2)
+
+      setRectFromCorners(sel, ax1, ay1, ax2, ay2);
+    }
+
+    // File load
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+      const im = new Image();
+      im.decoding = "async";
+      im.onload = () => {
+        URL.revokeObjectURL(url);
+        img = im;
+        selections = [];
+        selectedId = null;
+        mode = "idle";
+        dragStart = dragNow = null;
+        pointerDownId = null;
+        moveOffset = null;
+        resizeInfo = null;
+        setCanvasToImage();
+        setButtons();
+        renderList();
+      };
+      im.src = url;
+    });
+
+    // Pointer interactions
+    canvas.addEventListener("pointerdown", (ev) => {
+      if (!img) return;
+      canvas.setPointerCapture(ev.pointerId);
+      pointerDownId = ev.pointerId;
+
+      const p = getMousePosInImagePixels(ev);
+      const rectBB = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rectBB.width;
+      const scaleY = canvas.height / rectBB.height;
+      const handleSize = Math.max(10 * scaleX, 10 * scaleY);
+
+      const selected = getSelected();
+      const hitSel = hitTestSelection(p);
+
+      // If clicking on selected handle => resize
+      if (selected) {
+        const h = hitTestHandle(p, selected, handleSize);
+        if (h) {
+          mode = "resize";
+          resizeInfo = {
+            handle: h,
+            orig: { x: selected.x, y: selected.y, w: selected.w, h: selected.h }
+          };
+          dragStart = { x: p.x, y: p.y };
+          dragNow = dragStart;
+          redraw();
+          return;
+        }
+      }
+
+      // If clicking inside any selection => select + move
+      if (hitSel) {
+        setSelected(hitSel.id);
+        mode = "move";
+        moveOffset = { dx: p.x - hitSel.x, dy: p.y - hitSel.y };
+        dragStart = { x: p.x, y: p.y };
+        dragNow = dragStart;
+        redraw();
+        return;
+      }
+
+      // Else start drawing a new selection
+      mode = "draw";
+      dragStart = { x: p.x, y: p.y };
+      dragNow = dragStart;
+      redraw();
+    });
+
+    canvas.addEventListener("pointermove", (ev) => {
+      if (!img || ev.pointerId !== pointerDownId) return;
+      const p = getMousePosInImagePixels(ev);
+
+      if (mode === "draw") {
+        dragNow = { x: p.x, y: p.y };
+        redraw();
+      } else if (mode === "move") {
+        const sel = getSelected();
+        if (!sel) return;
+        // new top-left
+        sel.x = p.x - moveOffset.dx;
+        sel.y = p.y - moveOffset.dy;
+        enforceBounds(sel);
+        renderList();
+        redraw();
+      } else if (mode === "resize") {
+        const sel = getSelected();
+        if (!sel) return;
+        resizeUsingHandle(sel, resizeInfo.handle, p, resizeInfo.orig);
+        renderList();
+        redraw();
+      } else {
+        // idle: optional cursor feedback could go here
+      }
+    });
+
+    function endPointer(ev) {
+      if (!img || ev.pointerId !== pointerDownId) return;
+
+      if (mode === "draw" && dragStart && dragNow) {
+        const rect = normalizeRect(dragStart, dragNow, window.__shiftHeld === true);
+        mode = "idle";
+        dragStart = dragNow = null;
+        pointerDownId = null;
+        addSelection(rect);
+        return;
+      }
+
+      mode = "idle";
+      dragStart = dragNow = null;
+      pointerDownId = null;
+      moveOffset = null;
+      resizeInfo = null;
+      redraw();
+    }
+
+    canvas.addEventListener("pointerup", endPointer);
+    canvas.addEventListener("pointercancel", () => {
+      mode = "idle";
+      dragStart = dragNow = null;
+      pointerDownId = null;
+      moveOffset = null;
+      resizeInfo = null;
+      redraw();
+    });
+
+    // Keyboard
+    window.__shiftHeld = false;
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Shift") window.__shiftHeld = true;
+
+      if (e.key === "Escape") {
+        if (mode === "draw") {
+          mode = "idle";
+          dragStart = dragNow = null;
+          pointerDownId = null;
+          redraw();
+        }
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const sel = getSelected();
+        if (sel) deleteSelectionById(sel.id);
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "Shift") window.__shiftHeld = false;
+    });
+
+    // Toolbar buttons
+    btnUndo.addEventListener("click", () => {
+      const last = selections.pop();
+      if (last && last.id === selectedId) selectedId = selections.at(-1)?.id ?? null;
+      setButtons();
+      renderList();
+      redraw();
+    });
+
+    btnClear.addEventListener("click", () => {
+      selections = [];
+      selectedId = null;
+      setButtons();
+      renderList();
+      redraw();
+    });
+
+    btnExportAll.addEventListener("click", exportAll);
+
+    // Init
+    redraw();
+    setButtons();
+    renderList();
+  </script>
+</body>
+</html>
